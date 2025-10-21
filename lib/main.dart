@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import 'core/bloc/theme/theme_bloc.dart';
 import 'core/utils/app_shared_preferences.dart';
 import 'core/routing/app_router.dart';
 import 'core/services/firebase_service.dart';
+import 'core/services/session_service.dart';
 import 'core/di/injection_container.dart' as di;
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/payments/presentation/bloc/payments_bloc.dart';
@@ -36,11 +36,13 @@ void main() async {
   
   // Initialize dependency injection
   await di.initializeDependencies();
+  
+  // Initialize session service
+  await di.sl<SessionService>().initialize();
 
   runApp(MultiBlocProvider(
     providers: [
-      BlocProvider(create: (_) => ThemeBloc()),
-      BlocProvider(create: (_) => di.sl<AuthBloc>()),
+       BlocProvider(create: (_) => di.sl<AuthBloc>()),
       BlocProvider(create: (_) => di.sl<SettingsBloc>()),
       BlocProvider(create: (_) => di.sl<SubscriptionBloc>()),
       BlocProvider(create: (_) => di.sl<AppLockBloc>()..add(CheckLockStatusEvent())),

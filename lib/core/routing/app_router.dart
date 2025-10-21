@@ -24,6 +24,8 @@ import '../../features/students/domain/entities/student.dart';
 import '../../features/templates/domain/entities/session_template.dart';
 import '../../features/teacher_profile/presentation/screens/teacher_profile_completion_screen.dart';
 import '../../features/security/presentation/screens/app_lock_screen.dart';
+import '../../features/security/presentation/screens/session_test_screen.dart';
+import '../../features/settings/presentation/screens/theme_test_screen.dart';
 
 class AppRouter {
  Route? generateRoute(RouteSettings settings) {
@@ -75,10 +77,14 @@ class AppRouter {
        return _createRoute(const SubscriptionScreen());
      case Routes.teacherProfileComplete:
        return _createRoute(const TeacherProfileCompletionScreen());
-     case Routes.appLock:
-       return _createRoute(const AppLockScreen());
+    case Routes.appLock:
+      return _createRoute(const AppLockScreen());
+    case Routes.sessionTest:
+      return _createRoute(const SessionTestScreen());
+    case Routes.themeTest:
+      return _createRoute(const ThemeTestScreen());
 
-     default:
+    default:
        return null;
    }
  }
@@ -91,7 +97,7 @@ class AppRouter {
      transitionsBuilder: (context, animation, secondaryAnimation, child) {
        return FadeTransition(
          opacity: animation,
-         child: child,
+         child: Directionality(textDirection: TextDirection.rtl, child: child),
        );
      },
    );

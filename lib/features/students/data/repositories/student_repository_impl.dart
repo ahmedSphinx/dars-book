@@ -158,7 +158,13 @@ class StudentRepositoryImpl implements StudentRepository {
   @override
   Future<Either<Failure, List<Student>>> searchStudents(String query) async {
     try {
-      final snapshot = await _studentsCollection.get();
+      // Use Firestore query for better performance
+      // This requires a composite index on 'name' field
+      final snapshot = await _studentsCollection
+          .where('name', isGreaterThanOrEqualTo: query)
+          .where('name', isLessThan: '${query}z')
+          .get();
+      
       final students = snapshot.docs
           .map((doc) => StudentModel.fromJson(
                 doc.data() as Map<String, dynamic>,
@@ -169,7 +175,21 @@ class StudentRepositoryImpl implements StudentRepository {
           .toList();
       return Right(students);
     } catch (e) {
-      return Left(ServerFailure(e.toString()));
+      // Fallback to client-side filtering if Firestore query fails
+      try {
+        final snapshot = await _studentsCollection.get();
+        final students = snapshot.docs
+            .map((doc) => StudentModel.fromJson(
+                  doc.data() as Map<String, dynamic>,
+                  doc.id,
+                ))
+            .where((student) =>
+                student.name.toLowerCase().contains(query.toLowerCase()))
+            .toList();
+        return Right(students);
+      } catch (fallbackError) {
+        return Left(ServerFailure(fallbackError.toString()));
+      }
     }
   }
 

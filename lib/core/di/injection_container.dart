@@ -39,6 +39,7 @@ import '../../features/subscriptions/presentation/bloc/subscription_bloc.dart';
 import '../../features/settings/presentation/bloc/settings_bloc.dart';
 import '../../features/security/presentation/bloc/app_lock_bloc.dart';
 import '../../features/teacher_profile/presentation/bloc/teacher_profile_bloc.dart';
+import '../services/session_service.dart';
 
 final sl = GetIt.instance;
 
@@ -48,6 +49,9 @@ Future<void> initializeDependencies() async {
   sl.registerLazySingleton(() => FirebaseFirestore.instance);
   sl.registerLazySingleton(() => FirebaseFunctions.instance);
   sl.registerLazySingleton(() => const FlutterSecureStorage());
+  
+  // Services
+  sl.registerLazySingleton(() => SessionService());
 
   // Repositories
   sl.registerLazySingleton<AuthRepository>(
@@ -141,6 +145,7 @@ Future<void> initializeDependencies() async {
     () => AppLockBloc(
       settingsRepository: sl(),
       secureStorage: sl(),
+      sessionService: sl(),
     ),
   );
 

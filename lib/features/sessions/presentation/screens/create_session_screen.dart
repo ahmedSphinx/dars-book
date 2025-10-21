@@ -59,6 +59,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
               EasyLoading.showSuccess(state.message);
               if (context.mounted) {
                 Navigator.pop(context);
+                EasyLoading.dismiss();
               }
             } else if (state is SessionsError) {
               EasyLoading.showError(state.message);
@@ -81,11 +82,23 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                       if (_currentStep < 2)
                         ElevatedButton(
                           onPressed: details.onStepContinue,
-                          child: const Text('التالي'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                Theme.of(context).colorScheme.primary,
+                            foregroundColor:
+                                Theme.of(context).colorScheme.onPrimary,
+                          ),
+                          child: Text('التالي'),
                         ),
                       if (_currentStep == 2)
                         ElevatedButton(
                           onPressed: isLoading ? null : _saveSession,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                Theme.of(context).colorScheme.primary,
+                            foregroundColor:
+                                Theme.of(context).colorScheme.onPrimary,
+                          ),
                           child: isLoading
                               ? const SizedBox(
                                   height: 20,
@@ -98,6 +111,12 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                       const SizedBox(width: 12),
                       if (details.onStepCancel != null)
                         OutlinedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                Theme.of(context).colorScheme.primary,
+                            foregroundColor:
+                                Theme.of(context).colorScheme.onPrimary,
+                          ),
                           onPressed: details.onStepCancel,
                           child: const Text('السابق'),
                         ),
@@ -476,6 +495,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   }
 
   void _saveSession() {
+    EasyLoading.show(status: 'جاري حفظ الحصة...');
     final dateTime = DateTime(
       _selectedDate.year,
       _selectedDate.month,

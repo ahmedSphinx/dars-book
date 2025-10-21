@@ -21,4 +21,6 @@ class Routes {
   static const String subscription = '/subscription';
   static const String teacherProfileComplete = '/teacher/profile/complete';
   static const String appLock = '/app-lock';
+  static const String sessionTest = '/session-test';
+  static const String themeTest = '/theme-test';
 }

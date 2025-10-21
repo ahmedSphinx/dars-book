@@ -25,7 +25,11 @@ class PricingScreen extends StatelessWidget {
         ),
         body: BlocConsumer<PricesBloc, PricesState>(
           listener: (context, state) {
-            if (state is PriceOperationSuccess) { EasyLoading.showSuccess(state.message); } else if (state is PricesError) { EasyLoading.showError(state.message); }
+            if (state is PriceOperationSuccess) {
+              EasyLoading.showSuccess(state.message);
+            } else if (state is PricesError) {
+              EasyLoading.showError(state.message);
+            }
           },
           builder: (context, state) {
             if (state is PricesLoading) {

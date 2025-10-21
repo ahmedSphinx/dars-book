@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/di/injection_container.dart';
 import '../bloc/sessions_bloc.dart';
 import '../widgets/session_card.dart';
@@ -78,7 +79,7 @@ class SessionsListScreen extends StatelessWidget {
               // Group sessions by date
               final groupedSessions = <String, List>{};
               for (var session in state.sessions) {
-                final dateKey = session.dateTime.toString().split(' ')[0];
+                final dateKey = DateFormat('yyyy-MM-dd').format(session.dateTime);
                 groupedSessions.putIfAbsent(dateKey, () => []).add(session);
               }
 
@@ -107,7 +108,7 @@ class SessionsListScreen extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              dateKey,
+                              _formatDateForDisplay(dateKey),
                               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -160,6 +161,26 @@ class SessionsListScreen extends StatelessWidget {
     );
   }
 
+  String _formatDateForDisplay(String dateKey) {
+    try {
+      final date = DateTime.parse(dateKey);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final yesterday = today.subtract(const Duration(days: 1));
+      final sessionDate = DateTime(date.year, date.month, date.day);
+      
+      if (sessionDate == today) {
+        return 'اليوم';
+      } else if (sessionDate == yesterday) {
+        return 'أمس';
+      } else {
+        return DateFormat('EEEE، d MMMM', 'ar').format(date);
+      }
+    } catch (e) {
+      return dateKey; // Fallback to original if parsing fails
+    }
+  }
+
   void _showFilterDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -173,9 +194,12 @@ class SessionsListScreen extends StatelessWidget {
               title: const Text('اليوم'),
               onTap: () {
                 Navigator.pop(dialogContext);
+                final now = DateTime.now();
+                final startOfToday = DateTime(now.year, now.month, now.day);
+                final endOfToday = startOfToday.add(const Duration(days: 1));
                 context.read<SessionsBloc>().add(LoadSessionsByDateRange(
-                      startDate: DateTime.now().subtract(const Duration(days: 1)),
-                      endDate: DateTime.now(),
+                      startDate: startOfToday,
+                      endDate: endOfToday,
                     ));
               },
             ),
@@ -184,9 +208,13 @@ class SessionsListScreen extends StatelessWidget {
               title: const Text('هذا الأسبوع'),
               onTap: () {
                 Navigator.pop(dialogContext);
+                final now = DateTime.now();
+                final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+                final startOfWeekDay = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+                final endOfToday = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
                 context.read<SessionsBloc>().add(LoadSessionsByDateRange(
-                      startDate: DateTime.now().subtract(const Duration(days: 7)),
-                      endDate: DateTime.now(),
+                      startDate: startOfWeekDay,
+                      endDate: endOfToday,
                     ));
               },
             ),
@@ -195,9 +223,12 @@ class SessionsListScreen extends StatelessWidget {
               title: const Text('هذا الشهر'),
               onTap: () {
                 Navigator.pop(dialogContext);
+                final now = DateTime.now();
+                final startOfMonth = DateTime(now.year, now.month, 1);
+                final endOfToday = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
                 context.read<SessionsBloc>().add(LoadSessionsByDateRange(
-                      startDate: DateTime.now().subtract(const Duration(days: 30)),
-                      endDate: DateTime.now(),
+                      startDate: startOfMonth,
+                      endDate: endOfToday,
                     ));
               },
             ),

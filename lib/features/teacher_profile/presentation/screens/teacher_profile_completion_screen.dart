@@ -59,8 +59,9 @@ class _TeacherProfileCompletionScreenState
             if (state is TeacherProfileLoaded && state.teacher != null) {
               final t = state.teacher!;
               _nameController.text = t.name;
-              if (_phoneController.text.isEmpty)
+              if (_phoneController.text.isEmpty) {
                 _phoneController.text = t.phone;
+              }
               _subjectController.text = t.subject;
               _cityController.text = t.city;
             }

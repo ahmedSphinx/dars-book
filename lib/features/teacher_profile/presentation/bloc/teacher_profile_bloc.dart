@@ -1,6 +1,4 @@
-import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../domain/entities/teacher.dart';
 import '../../domain/repositories/teacher_repository.dart';
 import 'teacher_profile_event.dart';
 import 'teacher_profile_state.dart';

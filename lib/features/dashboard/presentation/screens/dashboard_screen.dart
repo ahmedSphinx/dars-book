@@ -8,6 +8,8 @@ import '../../../auth/presentation/bloc/auth_event.dart';
 import '../../../reports/presentation/bloc/reports_bloc.dart';
 import '../../../subscriptions/presentation/bloc/subscription_bloc.dart';
 import '../../../security/presentation/bloc/app_lock_bloc.dart';
+import '../../../security/presentation/widgets/session_timeout_warning.dart';
+import '../../../security/presentation/widgets/session_expired_dialog.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -41,6 +43,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
   }
 
+  void _startSession() {
+    // Only start session if user is already unlocked
+    final currentState = context.read<AppLockBloc>().state;
+    if (currentState is AppUnlocked) {
+      context.read<AppLockBloc>().add(StartSessionEvent());
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
@@ -52,12 +63,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Routes.appLock,
               (route) => false,
             );
+          } else if (state is AppUnlocked) {
+            // Start session when user becomes unlocked (after successful authentication)
+            _startSession();
+          } else if (state is SessionExpired) {
+            // Show session expired dialog and navigate to app lock
+            SessionExpiredDialog.show(context);
           }
         },
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('لوحة التحكم'),
+        child: SessionTimeoutWarning(
+          child: Scaffold(
+            appBar: AppBar(
+              title: const Text('لوحة التحكم'),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.security),
+                onPressed: () {
+                  Navigator.pushNamed(context, Routes.sessionTest);
+                },
+                tooltip: 'Session Test',
+              ),
+              IconButton(
+                icon: const Icon(Icons.palette),
+                onPressed: () {
+                  Navigator.pushNamed(context, Routes.themeTest);
+                },
+                tooltip: 'Theme Test',
+              ),
               IconButton(
                 icon: const Icon(Icons.settings),
                 onPressed: () {
@@ -65,9 +97,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
               ),
             ],
-          ),
-          drawer: _buildDrawer(context),
-          body: RefreshIndicator(
+            ),
+            drawer: _buildDrawer(context),
+            body: RefreshIndicator(
             onRefresh: () async {
               _loadDashboard();
             },
@@ -204,6 +236,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ).animate().scale(duration: 300.ms, delay: 600.ms).fadeIn(),
         ),
       ),
+    ),
     );
   }
 

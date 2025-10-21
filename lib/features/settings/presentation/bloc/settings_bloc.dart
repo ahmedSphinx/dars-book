@@ -83,6 +83,7 @@ class ClearPinEvent extends SettingsEvent {}
 class SettingsState extends Equatable {
   final ThemeMode themeMode;
   final String language;
+  final Locale locale;
   final bool animationsEnabled;
   final bool hapticsEnabled;
   final bool biometricEnabled;
@@ -91,6 +92,7 @@ class SettingsState extends Equatable {
   const SettingsState({
     this.themeMode = ThemeMode.system,
     this.language = 'ar',
+    this.locale = const Locale('ar', 'SA'),
     this.animationsEnabled = true,
     this.hapticsEnabled = true,
     this.biometricEnabled = false,
@@ -100,6 +102,7 @@ class SettingsState extends Equatable {
   SettingsState copyWith({
     ThemeMode? themeMode,
     String? language,
+    Locale? locale,
     bool? animationsEnabled,
     bool? hapticsEnabled,
     bool? biometricEnabled,
@@ -108,6 +111,7 @@ class SettingsState extends Equatable {
     return SettingsState(
       themeMode: themeMode ?? this.themeMode,
       language: language ?? this.language,
+      locale: locale ?? this.locale,
       animationsEnabled: animationsEnabled ?? this.animationsEnabled,
       hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
       biometricEnabled: biometricEnabled ?? this.biometricEnabled,
@@ -119,6 +123,7 @@ class SettingsState extends Equatable {
   List<Object?> get props => [
         themeMode,
         language,
+        locale,
         animationsEnabled,
         hapticsEnabled,
         biometricEnabled,
@@ -148,9 +153,15 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     LoadSettingsEvent event,
     Emitter<SettingsState> emit,
   ) async {
+    final language = settingsRepository.getLanguage();
+    final locale = language == 'ar' 
+        ? const Locale('ar', 'SA') 
+        : const Locale('en', 'US');
+    
     emit(SettingsState(
       themeMode: settingsRepository.getThemeMode(),
-      language: settingsRepository.getLanguage(),
+      language: language,
+      locale: locale,
       animationsEnabled: settingsRepository.getAnimationsEnabled(),
       hapticsEnabled: settingsRepository.getHapticsEnabled(),
       biometricEnabled: settingsRepository.getBiometricEnabled(),
@@ -171,7 +182,14 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     Emitter<SettingsState> emit,
   ) async {
     await settingsRepository.setLanguage(event.languageCode);
-    emit(state.copyWith(language: event.languageCode));
+    // Create appropriate locale based on language code
+    final locale = event.languageCode == 'ar' 
+        ? const Locale('ar', 'SA') 
+        : const Locale('en', 'US');
+    emit(state.copyWith(
+      language: event.languageCode,
+      locale: locale,
+    ));
   }
 
   Future<void> _onSetAnimationsEnabled(

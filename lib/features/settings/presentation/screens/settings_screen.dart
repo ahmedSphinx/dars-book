@@ -1,14 +1,10 @@
 import 'package:dars_book/features/security/presentation/bloc/app_lock_bloc.dart'
     as app_lock;
-import 'package:dars_book/core/bloc/theme/theme_bloc.dart';
 import 'package:dars_book/features/settings/presentation/bloc/settings_bloc.dart'
     as settings;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-
-import '../../../../core/bloc/theme/theme_event.dart';
-import '../../../../core/bloc/theme/theme_state.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -23,21 +19,20 @@ class SettingsScreen extends StatelessWidget {
         children: [
           // Theme Section
           _SectionHeader('المظهر'),
-          BlocBuilder<ThemeBloc, ThemeState>(
+          BlocBuilder<settings.SettingsBloc, settings.SettingsState>(
             builder: (context, state) {
-              final themeState = state as ThemeDataState;
               return ListTile(
                 leading: Icon(
-                  themeState.themeMode == ThemeMode.dark
+                  state.themeMode == ThemeMode.dark
                       ? Icons.dark_mode
-                      : themeState.themeMode == ThemeMode.light
+                      : state.themeMode == ThemeMode.light
                           ? Icons.light_mode
                           : Icons.brightness_auto,
                 ),
-                title: Text('المظهر'),
-                subtitle: Text(_getThemeModeLabel(themeState.themeMode)),
+                title: const Text('المظهر'),
+                subtitle: Text(_getThemeModeLabel(state.themeMode)),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () => _showThemeDialog(context, themeState.themeMode),
+                onTap: () => _showThemeDialog(context, state.themeMode),
               );
             },
           ),
@@ -72,7 +67,7 @@ class SettingsScreen extends StatelessWidget {
                 secondary: const Icon(Icons.fingerprint),
                 title: const Text('فتح بالبصمة'),
                 subtitle: const Text('استخدام البصمة لفتح التطبيق'),
-                value: isBiometricAvailable && _isBiometricEnabled(context),
+                value: (isBiometricAvailable && _isBiometricEnabled(context)),
                 onChanged: isBiometricAvailable ? (value) => _toggleBiometric(context, value) : null,
               );
             },
@@ -150,7 +145,7 @@ class SettingsScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('المظهر'),
+        title: const Text('المظهر'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -160,7 +155,7 @@ class SettingsScreen extends StatelessWidget {
               groupValue: currentMode,
               onChanged: (value) {
                 if (value != null) {
-                  context.read<ThemeBloc>().add(ChangeThemeEvent(value));
+                  context.read<settings.SettingsBloc>().add(settings.SetThemeModeEvent(value));
                   Navigator.pop(dialogContext);
                 }
               },
@@ -171,7 +166,7 @@ class SettingsScreen extends StatelessWidget {
               groupValue: currentMode,
               onChanged: (value) {
                 if (value != null) {
-                  context.read<ThemeBloc>().add(ChangeThemeEvent(value));
+                  context.read<settings.SettingsBloc>().add(settings.SetThemeModeEvent(value));
                   Navigator.pop(dialogContext);
                 }
               },
@@ -182,7 +177,7 @@ class SettingsScreen extends StatelessWidget {
               groupValue: currentMode,
               onChanged: (value) {
                 if (value != null) {
-                  context.read<ThemeBloc>().add(ChangeThemeEvent(value));
+                  context.read<settings.SettingsBloc>().add(settings.SetThemeModeEvent(value));
                   Navigator.pop(dialogContext);
                 }
               },

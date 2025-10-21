@@ -66,6 +66,26 @@ class _AppLockScreenState extends State<AppLockScreen> {
         } else if (state is AppLockInitial) {
           // Initial state, perhaps trigger check if needed
           // But since initState already checks biometric, maybe no action
+        } else if (state is SessionExpired) {
+          // Session expired, show lock screen
+          setState(() {
+            _isAuthenticating = false;
+          });
+        } else if (state is BiometricNotEnrolledState) {
+          EasyLoading.showError('لم يتم تسجيل البصمة. يرجى إعداد البصمة في إعدادات الجهاز');
+          setState(() {
+            _isAuthenticating = false;
+          });
+        } else if (state is BiometricNotAvailableState) {
+          EasyLoading.showError('البصمة غير متاحة على هذا الجهاز');
+          setState(() {
+            _isAuthenticating = false;
+          });
+        } else if (state is BiometricErrorState) {
+          EasyLoading.showError(state.error.userFriendlyMessage);
+          setState(() {
+            _isAuthenticating = false;
+          });
         }
       },
       child: Scaffold(
