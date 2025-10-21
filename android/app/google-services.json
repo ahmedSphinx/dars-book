@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "185236175269",
+    "project_id": "darsbook-fdf81",
+    "storage_bucket": "darsbook-fdf81.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:185236175269:android:9dd97b0610a567c3d2904c",
+        "android_client_info": {
+          "package_name": "com.devsolution.dars_book"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAn4ECOZONRxJiUxr_91wISMyJshP7sopU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

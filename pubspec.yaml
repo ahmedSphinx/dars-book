@@ -1,0 +1,73 @@
+name: dars_book
+description: A new Flutter project with Clean Architecture by Abdalluh Essam
+# Flutter version on machine: 3.32.6
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_bloc:
+  dio:
+  shared_preferences:
+  intl: ^0.20.2
+  equatable:
+  get_it:
+  cached_network_image:
+  flutter_screenutil:
+  flutter_animate:
+  freezed_annotation:
+  json_annotation:
+  flutter_native_splash:
+  animate_do:
+  lottie:
+  google_fonts:
+  flutter_launcher_icons:
+  animator:
+  dartz:
+  flutter_svg:
+  cupertino_icons:
+  # Firebase
+  firebase_core: ^3.8.1
+  firebase_auth: ^5.3.4
+  cloud_firestore: ^5.5.2
+  cloud_functions: ^5.2.2
+  firebase_storage: ^12.3.6
+  # Navigation
+  go_router: ^14.6.2
+  # Security
+  local_auth: ^2.3.0
+  flutter_secure_storage: ^9.2.2
+  # Export
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  csv: ^6.0.0
+  # UI/Animations
+  animations: ^2.0.11
+  dynamic_color: ^1.7.0
+  flutter_easyloading: ^3.0.5
+  flutter_localizations:
+    sdk: flutter
+  # Enhanced Theming
+  flex_color_scheme: ^8.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  build_runner:
+  freezed:
+  json_serializable:
+  bloc_test:
+  mockito:
+  flutter_lints:
+
+flutter:
+  uses-material-design: true
+  generate: true
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/lottie/
+    - assets/lang/
