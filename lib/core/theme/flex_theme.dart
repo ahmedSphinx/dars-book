@@ -1,32 +1,34 @@
 import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'app_colors_new.dart';
+import 'text_theme.dart';
 
 /// Enhanced theme configuration using Flex Color Scheme
 /// Provides professional, accessible colors with Cairo font integration
 class FlexTheme {
   // Define a professional color scheme suitable for educational apps
   static const FlexSchemeColor _scheme = FlexSchemeColor(
-    primary: Color(0xFF1F21A8), // Deep blue - primary brand color
-    primaryContainer: Color(0xFFE3E4FF), // Light blue container
-    secondary: Color(0xFF6B7280), // Professional gray
-    secondaryContainer: Color(0xFFE5E7EB), // Light gray container
-    tertiary: Color(0xFF059669), // Success green
-    tertiaryContainer: Color(0xFFD1FAE5), // Light green container
-    error: Color(0xFFDC2626), // Error red
-    errorContainer: Color(0xFFFEE2E2), // Light red container
+    primary: AppColors.primary,
+    primaryContainer: AppColors.primaryContainer,
+    secondary: AppColors.secondary,
+    secondaryContainer: AppColors.secondaryContainer,
+    tertiary: AppColors.tertiary,
+    tertiaryContainer: AppColors.tertiaryContainer,
+    error: AppColors.error,
+    errorContainer: AppColors.errorContainer,
   );
 
   // Dark theme color scheme
   static const FlexSchemeColor _darkScheme = FlexSchemeColor(
-    primary: Color(0xFF3B82F6), // Lighter blue for dark theme
-    primaryContainer: Color(0xFF1E3A8A), // Dark blue container
-    secondary: Color(0xFF9CA3AF), // Light gray for dark
-    secondaryContainer: Color(0xFF374151), // Dark gray container
-    tertiary: Color(0xFF10B981), // Bright green for dark
-    tertiaryContainer: Color(0xFF065F46), // Dark green container
-    error: Color(0xFFF87171), // Light red for dark
-    errorContainer: Color(0xFF991B1B), // Dark red container
+    primary: AppColors.primaryLight,
+    primaryContainer: AppColors.primaryDark,
+    secondary: AppColors.secondaryLight,
+    secondaryContainer: AppColors.secondaryDark,
+    tertiary: AppColors.tertiaryLight,
+    tertiaryContainer: AppColors.tertiaryDark,
+    error: AppColors.errorLight,
+    errorContainer: AppColors.errorDark,
   );
 
   /// Light theme configuration

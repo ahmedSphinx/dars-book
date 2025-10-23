@@ -56,6 +56,8 @@ class SetSessionTimeoutEvent extends AppLockEvent {
   List<Object?> get props => [minutes];
 }
 
+class RecoverFromErrorEvent extends AppLockEvent {}
+
 // States
 abstract class AppLockState extends Equatable {
   const AppLockState();
@@ -148,6 +150,7 @@ class AppLockBloc extends Bloc<AppLockEvent, AppLockState> {
     on<ExtendSessionEvent>(_onExtendSession);
     on<CheckSessionValidityEvent>(_onCheckSessionValidity);
     on<SetSessionTimeoutEvent>(_onSetSessionTimeout);
+    on<RecoverFromErrorEvent>(_onRecoverFromError);
     
     _initializeSessionListener();
   }
@@ -156,13 +159,17 @@ class AppLockBloc extends Bloc<AppLockEvent, AppLockState> {
     CheckLockStatusEvent event,
     Emitter<AppLockState> emit,
   ) async {
-    final pinEnabled = settingsRepository.getPinEnabled();
-    final biometricEnabled = settingsRepository.getBiometricEnabled();
+    try {
+      final pinEnabled = settingsRepository.getPinEnabled();
+      final biometricEnabled = settingsRepository.getBiometricEnabled();
 
-    if (pinEnabled || biometricEnabled) {
-      emit(const AppLocked());
-    } else {
-      emit(const AppUnlocked());
+      if (pinEnabled || biometricEnabled) {
+        _safeEmit(emit, const AppLocked());
+      } else {
+        _safeEmit(emit, const AppUnlocked());
+      }
+    } catch (e) {
+      _safeEmit(emit, AppLockError('خطأ في التحقق من حالة القفل: ${e.toString()}'));
     }
   }
 
@@ -255,9 +262,11 @@ class AppLockBloc extends Bloc<AppLockEvent, AppLockState> {
       if (storedPin == event.pin) {
         sessionService.startSession();
         emit(const AppUnlocked());
+      } else {
+        emit(const AppLockError('رمز القفل غير صحيح'));
       }
     } catch (e) {
-      emit(AppLockError(e.toString()));
+      emit(AppLockError('حدث خطأ في التحقق من الرمز: ${e.toString()}'));
     }
   }
 
@@ -265,8 +274,21 @@ class AppLockBloc extends Bloc<AppLockEvent, AppLockState> {
     SetPinEvent event,
     Emitter<AppLockState> emit,
   ) async {
-    await settingsRepository.setPin(event.pin);
-    await settingsRepository.setPinEnabled(true);
+    try {
+      // Validate PIN format (4 digits)
+      if (event.pin.length != 4 || !RegExp(r'^\d{4}$').hasMatch(event.pin)) {
+        emit(const AppLockError('يجب أن يكون الرمز 4 أرقام'));
+        return;
+      }
+      
+      await settingsRepository.setPin(event.pin);
+      await settingsRepository.setPinEnabled(true);
+      
+      // Emit success state or return to previous state
+      emit(const AppUnlocked());
+    } catch (e) {
+      emit(AppLockError('حدث خطأ في حفظ الرمز: ${e.toString()}'));
+    }
   }
 
   Future<void> _onLockApp(
@@ -298,29 +320,41 @@ class AppLockBloc extends Bloc<AppLockEvent, AppLockState> {
     StartSessionEvent event,
     Emitter<AppLockState> emit,
   ) async {
-    // Only start the session, don't change the state
-    // State changes should only happen through proper authentication
-    sessionService.startSession();
+    try {
+      // Only start the session, don't change the state
+      // State changes should only happen through proper authentication
+      sessionService.startSession();
+    } catch (e) {
+      emit(AppLockError('حدث خطأ في بدء الجلسة: ${e.toString()}'));
+    }
   }
 
   Future<void> _onExtendSession(
     ExtendSessionEvent event,
     Emitter<AppLockState> emit,
   ) async {
-    sessionService.extendSession();
-    final remainingSeconds = sessionService.getRemainingSessionTime();
-    emit(SessionActive(remainingSeconds));
+    try {
+      sessionService.extendSession();
+      final remainingSeconds = sessionService.getRemainingSessionTime();
+      emit(SessionActive(remainingSeconds));
+    } catch (e) {
+      emit(AppLockError('حدث خطأ في تمديد الجلسة: ${e.toString()}'));
+    }
   }
 
   Future<void> _onCheckSessionValidity(
     CheckSessionValidityEvent event,
     Emitter<AppLockState> emit,
   ) async {
-    if (sessionService.isSessionValid()) {
-      final remainingSeconds = sessionService.getRemainingSessionTime();
-      emit(SessionActive(remainingSeconds));
-    } else {
-      emit(const SessionExpired());
+    try {
+      if (sessionService.isSessionValid()) {
+        final remainingSeconds = sessionService.getRemainingSessionTime();
+        emit(SessionActive(remainingSeconds));
+      } else {
+        emit(const SessionExpired());
+      }
+    } catch (e) {
+      emit(AppLockError('حدث خطأ في التحقق من صحة الجلسة: ${e.toString()}'));
     }
   }
 
@@ -328,8 +362,78 @@ class AppLockBloc extends Bloc<AppLockEvent, AppLockState> {
     SetSessionTimeoutEvent event,
     Emitter<AppLockState> emit,
   ) async {
-    await sessionService.setSessionTimeout(event.minutes);
+    try {
+      // Validate timeout value
+      if (event.minutes <= 0 || event.minutes > 1440) { // Max 24 hours
+        emit(const AppLockError('مهلة الجلسة يجب أن تكون بين 1 و 1440 دقيقة'));
+        return;
+      }
+      
+      await sessionService.setSessionTimeout(event.minutes);
+    } catch (e) {
+      emit(AppLockError('حدث خطأ في تعيين مهلة الجلسة: ${e.toString()}'));
+    }
   }
+
+  Future<void> _onRecoverFromError(
+    RecoverFromErrorEvent event,
+    Emitter<AppLockState> emit,
+  ) async {
+    await _recoverFromError(emit);
+  }
+
+  /// Validate state transitions to prevent invalid states
+  bool _isValidStateTransition(AppLockState currentState, AppLockState newState) {
+    // Define valid state transitions
+    const validTransitions = {
+      'AppLockInitial': ['AppLocked', 'AppUnlocked', 'BiometricAvailable', 'BiometricNotAvailableState', 'BiometricNotEnrolledState'],
+      'AppLocked': ['AppUnlocked', 'AppLockError', 'BiometricErrorState'],
+      'AppUnlocked': ['AppLocked', 'SessionActive', 'SessionExpired'],
+      'BiometricAvailable': ['AppUnlocked', 'AppLockError', 'BiometricErrorState'],
+      'BiometricNotEnrolledState': ['AppLocked', 'AppLockError'],
+      'BiometricNotAvailableState': ['AppLocked', 'AppLockError'],
+      'BiometricErrorState': ['AppLocked', 'AppUnlocked'],
+      'AppLockError': ['AppLocked', 'AppUnlocked'],
+      'SessionActive': ['SessionExpired', 'AppLocked'],
+      'SessionExpired': ['AppLocked'],
+    };
+
+    final currentStateName = currentState.runtimeType.toString();
+    final newStateName = newState.runtimeType.toString();
+    
+    return validTransitions[currentStateName]?.contains(newStateName) ?? true;
+  }
+
+  /// Safe state emission with validation
+  void _safeEmit(Emitter<AppLockState> emit, AppLockState newState) {
+    if (_isValidStateTransition(state, newState)) {
+      emit(newState);
+    } else {
+      // Log invalid transition for debugging (only in debug mode)
+      // ignore: avoid_print
+      print('Invalid state transition: ${state.runtimeType} -> ${newState.runtimeType}');
+      emit(const AppLockError('Invalid state transition'));
+    }
+  }
+
+  /// Recover from error states
+  Future<void> _recoverFromError(Emitter<AppLockState> emit) async {
+    try {
+      // Check if we should be locked or unlocked
+      final pinEnabled = settingsRepository.getPinEnabled();
+      final biometricEnabled = settingsRepository.getBiometricEnabled();
+      
+      if (pinEnabled || biometricEnabled) {
+        _safeEmit(emit, const AppLocked());
+      } else {
+        _safeEmit(emit, const AppUnlocked());
+      }
+    } catch (e) {
+      // If recovery fails, go to locked state for security
+      _safeEmit(emit, const AppLocked());
+    }
+  }
+
 
   @override
   Future<void> close() {

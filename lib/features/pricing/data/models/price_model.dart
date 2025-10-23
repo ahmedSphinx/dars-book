@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/price.dart';
 
 class PriceModel extends Price {
@@ -9,12 +10,40 @@ class PriceModel extends Price {
   });
 
   factory PriceModel.fromJson(Map<String, dynamic> json, String year) {
-    return PriceModel(
-      year: year,
-      lessonPrice: (json['lessonPrice'] as num).toDouble(),
-      bookletPrice: (json['bookletPrice'] as num).toDouble(),
-      updatedAt: (json['updatedAt'] as dynamic).toDate(),
-    );
+    try {
+      // Validate required fields
+      if (!json.containsKey('lessonPrice') || !json.containsKey('bookletPrice')) {
+        throw FormatException('Missing required price fields');
+      }
+
+      final lessonPrice = (json['lessonPrice'] as num).toDouble();
+      final bookletPrice = (json['bookletPrice'] as num).toDouble();
+      
+      // Validate price values
+      if (lessonPrice < 0 || bookletPrice < 0) {
+        throw FormatException('Prices cannot be negative');
+      }
+
+      DateTime updatedAt;
+      if (json['updatedAt'] != null) {
+        if (json['updatedAt'] is Timestamp) {
+          updatedAt = (json['updatedAt'] as Timestamp).toDate();
+        } else {
+          updatedAt = DateTime.parse(json['updatedAt'].toString());
+        }
+      } else {
+        updatedAt = DateTime.now();
+      }
+
+      return PriceModel(
+        year: year,
+        lessonPrice: lessonPrice,
+        bookletPrice: bookletPrice,
+        updatedAt: updatedAt,
+      );
+    } catch (e) {
+      throw FormatException('Invalid price data: $e');
+    }
   }
 
   Map<String, dynamic> toJson() {

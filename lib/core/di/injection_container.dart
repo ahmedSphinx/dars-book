@@ -137,9 +137,9 @@ Future<void> initializeDependencies() async {
     () => CollectionsBloc(reportRepository: sl()),
   );
   
-  sl.registerLazySingleton(() => SubscriptionBloc(subscriptionRepository: sl()));
+  sl.registerFactory(() => SubscriptionBloc(subscriptionRepository: sl()));
   
-  sl.registerLazySingleton(() => SettingsBloc(settingsRepository: sl()));
+  sl.registerFactory(() => SettingsBloc(settingsRepository: sl()));
   
   sl.registerLazySingleton(
     () => AppLockBloc(
@@ -149,7 +149,7 @@ Future<void> initializeDependencies() async {
     ),
   );
 
-  sl.registerLazySingleton(
+  sl.registerFactory(
     () => TeacherProfileBloc(teacherRepository: sl()),
   );
 }

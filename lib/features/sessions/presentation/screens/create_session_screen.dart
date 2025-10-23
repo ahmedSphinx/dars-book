@@ -279,6 +279,10 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                             ),
                           ],
                         );
+                      } else if (state is StudentsError) {
+                        return Center(
+                          child: Text(state.message),
+                        );
                       }
                       return const SizedBox.shrink();
                     },
@@ -521,8 +525,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
       );
     }).toList();
 
-    final session = Session(
-      id: '',
+    final session = Session.createNew(
       dateTime: dateTime,
       hasBooklet: _hasBooklet,
       note: _noteController.text.isNotEmpty ? _noteController.text : null,

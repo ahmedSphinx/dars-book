@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'core/theme/flex_theme.dart';
+import 'core/theme/flex_theme_new.dart' as flex_theme_new;
 import 'core/routing/app_router.dart';
 import 'core/constants/app_constants.dart';
 import 'core/services/app_lifecycle_service.dart';
@@ -21,6 +21,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   late AppLifecycleService _lifecycleService;
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -39,28 +40,25 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _handleSessionExpired(BuildContext context) {
-    // Show session expired dialog
-    SessionExpiredDialog.show(context);
+    // Use the global navigator key to show dialog
+    final navigator = _navigatorKey.currentState;
+    if (navigator != null) {
+      SessionExpiredDialog.show(navigator.context);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<SettingsBloc, SettingsState>(
-      builder: (context, settingsState) => BlocListener<AppLockBloc, AppLockState>(
-        listener: (context, state) {
-          if (state is SessionExpired) {
-            // Handle session expiration globally
-            _handleSessionExpired(context);
-          }
-        },
-        child: MaterialApp(
+      builder: (context, settingsState) => MaterialApp(
+        navigatorKey: _navigatorKey,
         debugShowCheckedModeBanner: false,
         title: AppConstants.appName,
-        theme: FlexTheme.getTheme(
+        theme: flex_theme_new.FlexThemeNew.getTheme(
           brightness: Brightness.light,
           locale: settingsState.locale,
         ),
-        darkTheme: FlexTheme.getTheme(
+        darkTheme: flex_theme_new.FlexThemeNew.getTheme(
           brightness: Brightness.dark,
           locale: settingsState.locale,
         ),
@@ -84,10 +82,17 @@ class _MyAppState extends State<MyApp> {
             textDirection: settingsState.locale.languageCode == 'ar' 
                 ? TextDirection.rtl 
                 : TextDirection.ltr,
-            child: EasyLoading.init()(context, child),
+            child: BlocListener<AppLockBloc, AppLockState>(
+              listener: (context, state) {
+                if (state is SessionExpired) {
+                  // Handle session expiration globally
+                  _handleSessionExpired(context);
+                }
+              },
+              child: EasyLoading.init()(context, child),
+            ),
           );
         },
-        ),
       ),
     );
   }

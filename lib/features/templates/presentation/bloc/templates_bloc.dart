@@ -120,7 +120,11 @@ class TemplatesBloc extends Bloc<TemplatesEvent, TemplatesState> {
 
     result.fold(
       (failure) => emit(TemplatesError(failure.message)),
-      (_) => emit(const TemplateOperationSuccess('Template created successfully')),
+      (_) {
+        emit(const TemplateOperationSuccess('تم إنشاء القالب بنجاح'));
+        // Refresh templates after successful creation
+        add(const LoadTemplates());
+      },
     );
   }
 
@@ -134,7 +138,11 @@ class TemplatesBloc extends Bloc<TemplatesEvent, TemplatesState> {
 
     result.fold(
       (failure) => emit(TemplatesError(failure.message)),
-      (_) => emit(const TemplateOperationSuccess('Template updated successfully')),
+      (_) {
+        emit(const TemplateOperationSuccess('تم تحديث القالب بنجاح'));
+        // Refresh templates after successful update
+        add(const LoadTemplates());
+      },
     );
   }
 
@@ -148,7 +156,11 @@ class TemplatesBloc extends Bloc<TemplatesEvent, TemplatesState> {
 
     result.fold(
       (failure) => emit(TemplatesError(failure.message)),
-      (_) => emit(const TemplateOperationSuccess('Template deleted successfully')),
+      (_) {
+        emit(const TemplateOperationSuccess('تم حذف القالب بنجاح'));
+        // Refresh templates after successful deletion
+        add(const LoadTemplates());
+      },
     );
   }
 }

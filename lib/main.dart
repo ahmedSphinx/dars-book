@@ -20,6 +20,7 @@ import 'app.dart';
 import 'app_bloc_observer.dart';
 import 'features/teacher_profile/presentation/bloc/teacher_profile_bloc.dart';
 import 'features/templates/presentation/bloc/templates_bloc.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +56,6 @@ void main() async {
       BlocProvider(create: (_) => di.sl<StudentsBloc>()),
       BlocProvider(create: (_) => di.sl<TeacherProfileBloc>()),
     ],
-    child: MyApp(appRouter: AppRouter()),
+    child: ScreenUtilInit(child: MyApp(appRouter: AppRouter())),
   ));
 }

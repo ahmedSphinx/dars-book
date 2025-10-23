@@ -230,7 +230,6 @@ class _SessionTestScreenState extends State<SessionTestScreen> {
             
             // Instructions
             Card(
-              color: Colors.blue.shade50,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(

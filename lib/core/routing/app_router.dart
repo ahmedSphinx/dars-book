@@ -75,17 +75,16 @@ class AppRouter {
        return _createRoute(const SettingsScreen());
      case Routes.subscription:
        return _createRoute(const SubscriptionScreen());
-     case Routes.teacherProfileComplete:
-       return _createRoute(const TeacherProfileCompletionScreen());
+    case Routes.teacherProfileComplete:
+      return _createRoute(const TeacherProfileCompletionScreen());
     case Routes.appLock:
       return _createRoute(const AppLockScreen());
     case Routes.sessionTest:
       return _createRoute(const SessionTestScreen());
     case Routes.themeTest:
       return _createRoute(const ThemeTestScreen());
-
     default:
-       return null;
+      return _createRoute(const SplashScreen()); // Fallback to splash
    }
  }
 

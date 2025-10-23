@@ -150,7 +150,11 @@ class PricesBloc extends Bloc<PricesEvent, PricesState> {
 
     result.fold(
       (failure) => emit(PricesError(failure.message)),
-      (_) => emit(const PriceOperationSuccess('Price updated successfully')),
+      (_) {
+        emit(const PriceOperationSuccess('تم تحديث الأسعار بنجاح'));
+        // Refresh prices after successful update
+        add(const LoadPrices());
+      },
     );
   }
 
@@ -168,7 +172,7 @@ class PricesBloc extends Bloc<PricesEvent, PricesState> {
 
     result.fold(
       (failure) => emit(PricesError(failure.message)),
-      (_) => emit(const PriceOperationSuccess('Custom price set successfully')),
+      (_) => emit(const PriceOperationSuccess('تم تعيين السعر المخصص بنجاح')),
     );
   }
 
@@ -182,7 +186,7 @@ class PricesBloc extends Bloc<PricesEvent, PricesState> {
 
     result.fold(
       (failure) => emit(PricesError(failure.message)),
-      (_) => emit(const PriceOperationSuccess('Custom price cleared successfully')),
+      (_) => emit(const PriceOperationSuccess('تم مسح السعر المخصص بنجاح')),
     );
   }
 }

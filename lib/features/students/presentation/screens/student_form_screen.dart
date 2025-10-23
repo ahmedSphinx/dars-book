@@ -118,54 +118,51 @@ class _StudentFormScreenState extends State<StudentFormScreen> {
                     const SizedBox(height: 16),
 
                     // Phone Field
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: DropdownButtonHideUnderline(
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Row(
+                        children: [
+                          DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
                               value: _countryCode,
                               items: const [
-                                DropdownMenuItem(
-                                    value: '+20', child: Text('+20')),
-                                DropdownMenuItem(
-                                    value: '+966', child: Text('+966')),
-                                DropdownMenuItem(
-                                    value: '+971', child: Text('+971')),
-                              ],
-                              onChanged: (value) {
-                                setState(() => _countryCode = value!);
+                                  DropdownMenuItem(
+                                      value: '+20', child: Text('+20')),
+                                  DropdownMenuItem(
+                                      value: '+966', child: Text('+966')),
+                                  DropdownMenuItem(
+                                      value: '+971', child: Text('+971')),
+                                ],
+                                onChanged: (value) {
+                                  setState(() => _countryCode = value!);
+                                },
+                              
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _phoneController,
+                              keyboardType: TextInputType.phone,
+                              textDirection: TextDirection.ltr,
+                              decoration: InputDecoration(
+                                labelText:
+                                    '${'رقم الهاتف'} ( اختياري )',
+                                prefixIcon: const Icon(Icons.phone),
+                                border: const OutlineInputBorder(),
+                              ),
+                              validator: (value) {
+                                if (value != null &&
+                                    value.isNotEmpty &&
+                                    value.length < 9) {
+                                  return 'رقم هاتف غير صحيح';
+                                }
+                                return null;
                               },
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            textDirection: TextDirection.ltr,
-                            decoration: InputDecoration(
-                              labelText:
-                                  '${'رقم الهاتف'} ( اختياري )',
-                              prefixIcon: const Icon(Icons.phone),
-                              border: const OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value != null &&
-                                  value.isNotEmpty &&
-                                  value.length < 9) {
-                                return 'رقم هاتف غير صحيح';
-                              }
-                              return null;
-                            },
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 16),
 

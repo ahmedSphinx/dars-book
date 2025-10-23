@@ -59,6 +59,17 @@ class PriceRepositoryImpl implements PriceRepository {
   @override
   Future<Either<Failure, Price>> setYearPrice(Price price) async {
     try {
+      // Validate input
+      if (price.year.isEmpty) {
+        return Left(ServerFailure('Year cannot be empty'));
+      }
+      if (price.lessonPrice < 0 || price.bookletPrice < 0) {
+        return Left(ServerFailure('Prices cannot be negative'));
+      }
+      if (_userId.isEmpty) {
+        return Left(ServerFailure('User not authenticated'));
+      }
+
       await _pricesCollection.doc(price.year).set({
         'lessonPrice': price.lessonPrice,
         'bookletPrice': price.bookletPrice,
@@ -78,6 +89,20 @@ class PriceRepositoryImpl implements PriceRepository {
     double? bookletPrice,
   }) async {
     try {
+      // Validate input
+      if (studentId.isEmpty) {
+        return Left(ServerFailure('Student ID cannot be empty'));
+      }
+      if (_userId.isEmpty) {
+        return Left(ServerFailure('User not authenticated'));
+      }
+      if (lessonPrice != null && lessonPrice < 0) {
+        return Left(ServerFailure('Lesson price cannot be negative'));
+      }
+      if (bookletPrice != null && bookletPrice < 0) {
+        return Left(ServerFailure('Booklet price cannot be negative'));
+      }
+
       final updateData = <String, dynamic>{
         'updatedAt': FieldValue.serverTimestamp(),
       };
@@ -99,6 +124,14 @@ class PriceRepositoryImpl implements PriceRepository {
   @override
   Future<Either<Failure, void>> clearStudentCustomPrice(String studentId) async {
     try {
+      // Validate input
+      if (studentId.isEmpty) {
+        return Left(ServerFailure('Student ID cannot be empty'));
+      }
+      if (_userId.isEmpty) {
+        return Left(ServerFailure('User not authenticated'));
+      }
+
       await _studentsCollection.doc(studentId).update({
         'customLessonPrice': FieldValue.delete(),
         'customBookletPrice': FieldValue.delete(),

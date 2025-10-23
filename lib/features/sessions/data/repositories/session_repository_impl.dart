@@ -23,6 +23,17 @@ class SessionRepositoryImpl implements SessionRepository {
   @override
   Future<Either<Failure, Session>> createSession(Session session) async {
     try {
+      // Validate input
+      if (_userId.isEmpty) {
+        return Left(ServerFailure('User not authenticated'));
+      }
+      if (session.dateTime.isAfter(DateTime.now().add(const Duration(days: 365)))) {
+        return Left(ServerFailure('Session date cannot be more than 1 year in the future'));
+      }
+      if (session.dateTime.isBefore(DateTime.now().subtract(const Duration(days: 365)))) {
+        return Left(ServerFailure('Session date cannot be more than 1 year in the past'));
+      }
+
       final docRef = await _sessionsCollection.add({
         'dateTime': Timestamp.fromDate(session.dateTime),
         'hasBooklet': session.hasBooklet,
@@ -56,6 +67,14 @@ class SessionRepositoryImpl implements SessionRepository {
   @override
   Future<Either<Failure, Session>> getSessionById(String sessionId) async {
     try {
+      // Validate input
+      if (sessionId.isEmpty) {
+        return Left(ServerFailure('Session ID cannot be empty'));
+      }
+      if (_userId.isEmpty) {
+        return Left(ServerFailure('User not authenticated'));
+      }
+
       final doc = await _sessionsCollection.doc(sessionId).get();
       if (!doc.exists) {
         return Left(ServerFailure('Session not found'));

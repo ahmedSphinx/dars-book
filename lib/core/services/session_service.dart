@@ -6,31 +6,32 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class SessionService {
   static const String _lastAuthTimeKey = 'last_auth_time';
   static const String _sessionTimeoutKey = 'session_timeout';
-  static const int _defaultTimeoutMinutes = 5;
-  
+  static const int _defaultTimeoutMinutes = 3;
+
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   Timer? _sessionTimer;
   DateTime? _lastAuthTime;
   int _sessionTimeoutMinutes = _defaultTimeoutMinutes;
-  
+
   // Stream controller for session events
-  final StreamController<SessionEvent> _sessionController = 
+  final StreamController<SessionEvent> _sessionController =
       StreamController<SessionEvent>.broadcast();
-  
+
   Stream<SessionEvent> get sessionStream => _sessionController.stream;
-  
+
   /// Initialize the session service
   Future<void> initialize() async {
     await _loadSessionSettings();
     await _loadLastAuthTime();
   }
-  
+
   /// Load session settings from storage
   Future<void> _loadSessionSettings() async {
     try {
       final timeoutStr = await _secureStorage.read(key: _sessionTimeoutKey);
       if (timeoutStr != null) {
-        _sessionTimeoutMinutes = int.tryParse(timeoutStr) ?? _defaultTimeoutMinutes;
+        _sessionTimeoutMinutes =
+            int.tryParse(timeoutStr) ?? _defaultTimeoutMinutes;
       }
     } catch (e) {
       if (kDebugMode) {
@@ -38,7 +39,7 @@ class SessionService {
       }
     }
   }
-  
+
   /// Load last authentication time from storage
   Future<void> _loadLastAuthTime() async {
     try {
@@ -52,7 +53,7 @@ class SessionService {
       }
     }
   }
-  
+
   /// Save last authentication time to storage
   Future<void> _saveLastAuthTime() async {
     try {
@@ -66,7 +67,7 @@ class SessionService {
       }
     }
   }
-  
+
   /// Save session timeout setting
   Future<void> _saveSessionTimeout() async {
     try {
@@ -80,7 +81,7 @@ class SessionService {
       }
     }
   }
-  
+
   /// Start a new session (call when user authenticates)
   void startSession() {
     _lastAuthTime = DateTime.now();
@@ -88,7 +89,7 @@ class SessionService {
     _startSessionTimer();
     _sessionController.add(SessionStarted());
   }
-  
+
   /// Extend the current session
   void extendSession() {
     if (_lastAuthTime != null) {
@@ -98,7 +99,7 @@ class SessionService {
       _sessionController.add(SessionExtended());
     }
   }
-  
+
   /// End the current session
   void endSession() {
     _lastAuthTime = null;
@@ -106,48 +107,48 @@ class SessionService {
     _stopSessionTimer();
     _sessionController.add(SessionEnded());
   }
-  
+
   /// Check if session is still valid
   bool isSessionValid() {
     if (_lastAuthTime == null) return false;
-    
+
     final now = DateTime.now();
     final timeDifference = now.difference(_lastAuthTime!);
     final timeoutDuration = Duration(minutes: _sessionTimeoutMinutes);
-    
+
     return timeDifference < timeoutDuration;
   }
-  
+
   /// Get remaining session time in seconds
   int getRemainingSessionTime() {
     if (_lastAuthTime == null) return 0;
-    
+
     final now = DateTime.now();
     final timeDifference = now.difference(_lastAuthTime!);
     final timeoutDuration = Duration(minutes: _sessionTimeoutMinutes);
-    
+
     final remaining = timeoutDuration - timeDifference;
     return remaining.inSeconds > 0 ? remaining.inSeconds : 0;
   }
-  
+
   /// Set session timeout in minutes
   Future<void> setSessionTimeout(int minutes) async {
     _sessionTimeoutMinutes = minutes;
     await _saveSessionTimeout();
-    
+
     // Restart timer with new timeout
     if (_lastAuthTime != null) {
       _startSessionTimer();
     }
   }
-  
+
   /// Get current session timeout in minutes
   int get sessionTimeoutMinutes => _sessionTimeoutMinutes;
-  
+
   /// Start the session timer
   void _startSessionTimer() {
     _stopSessionTimer();
-    
+
     _sessionTimer = Timer(
       Duration(minutes: _sessionTimeoutMinutes),
       () {
@@ -155,19 +156,19 @@ class SessionService {
       },
     );
   }
-  
+
   /// Stop the session timer
   void _stopSessionTimer() {
     _sessionTimer?.cancel();
     _sessionTimer = null;
   }
-  
+
   /// Handle app pause (user leaves app)
   void onAppPaused() {
     // Don't end session immediately on pause
     // Session will be checked when app resumes
   }
-  
+
   /// Handle app resume (user returns to app)
   void onAppResumed() {
     // Only check session validity, don't extend automatically
@@ -176,12 +177,12 @@ class SessionService {
     }
     // Don't automatically extend session on resume to avoid loops
   }
-  
+
   /// Force session expiration (for testing or manual lock)
   void forceSessionExpiration() {
     _sessionController.add(SessionExpired());
   }
-  
+
   /// Dispose resources
   void dispose() {
     _stopSessionTimer();

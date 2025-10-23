@@ -163,7 +163,11 @@ class SessionsBloc extends Bloc<SessionsEvent, SessionsState> {
 
     result.fold(
       (failure) => emit(SessionsError(failure.message)),
-      (_) => emit(const SessionOperationSuccess('Session created successfully')),
+      (_) {
+        emit(const SessionOperationSuccess('تم إنشاء الحصة بنجاح'));
+        // Refresh sessions after successful creation
+        add(const LoadSessions());
+      },
     );
   }
 
@@ -180,7 +184,11 @@ class SessionsBloc extends Bloc<SessionsEvent, SessionsState> {
 
     result.fold(
       (failure) => emit(SessionsError(failure.message)),
-      (_) => emit(const SessionOperationSuccess('Attendance updated successfully')),
+      (_) {
+        emit(const SessionOperationSuccess('تم تحديث الحضور بنجاح'));
+        // Refresh sessions after successful update
+        add(const LoadSessions());
+      },
     );
   }
 
@@ -194,7 +202,11 @@ class SessionsBloc extends Bloc<SessionsEvent, SessionsState> {
 
     result.fold(
       (failure) => emit(SessionsError(failure.message)),
-      (_) => emit(const SessionOperationSuccess('Session deleted successfully')),
+      (_) {
+        emit(const SessionOperationSuccess('تم حذف الحصة بنجاح'));
+        // Refresh sessions after successful deletion
+        add(const LoadSessions());
+      },
     );
   }
 }

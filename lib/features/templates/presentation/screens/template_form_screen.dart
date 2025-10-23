@@ -22,7 +22,7 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _noteController = TextEditingController();
-  
+
   TimeOfDay? _selectedTime;
   bool _hasBooklet = false;
   Set<String> _selectedStudentIds = {};
@@ -60,13 +60,12 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (_) => sl<TemplatesBloc>()),
-        BlocProvider(create: (_) => sl<StudentsBloc>()..add(const LoadStudents())),
+        BlocProvider(
+            create: (_) => sl<StudentsBloc>()..add(const LoadStudents())),
       ],
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.template == null
-              ? 'إنشاء قالب'
-              : 'تعديل قالب'),
+          title: Text(widget.template == null ? 'إنشاء قالب' : 'تعديل قالب'),
         ),
         body: BlocConsumer<TemplatesBloc, TemplatesState>(
           listener: (context, state) {
@@ -106,7 +105,7 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Time
                     Text(
                       'الوقت الافتراضي',
@@ -128,7 +127,7 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Has Booklet
                     SwitchListTile(
                       title: const Text('يحتوي على ملزمة'),
@@ -140,7 +139,7 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Recurring Days
                     Text(
                       'الأيام المتكررة',
@@ -169,7 +168,7 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
                       }),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Students Selection
                     Text(
                       'الطلاب',
@@ -181,32 +180,38 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
                     BlocBuilder<StudentsBloc, StudentsState>(
                       builder: (context, state) {
                         if (state is StudentsLoading) {
-                          return const Center(child: CircularProgressIndicator());
+                          return const Center(
+                              child: CircularProgressIndicator());
                         } else if (state is StudentsLoaded) {
-                          _availableStudents = state.students.where((s) => s.isActive).toList();
+                          _availableStudents =
+                              state.students.where((s) => s.isActive).toList();
 
                           return Column(
                             children: [
                               // Select All / Deselect All
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('${_selectedStudentIds.length} طالب محدد'),
+                                  Text(
+                                      '${_selectedStudentIds.length} طالب محدد'),
                                   Row(
                                     children: [
                                       TextButton(
                                         onPressed: () {
                                           setState(() {
-                                            _selectedStudentIds = _availableStudents
-                                                .map((s) => s.id)
-                                                .toSet();
+                                            _selectedStudentIds =
+                                                _availableStudents
+                                                    .map((s) => s.id)
+                                                    .toSet();
                                           });
                                         },
                                         child: const Text('تحديد الكل'),
                                       ),
                                       TextButton(
                                         onPressed: () {
-                                          setState(() => _selectedStudentIds.clear());
+                                          setState(() =>
+                                              _selectedStudentIds.clear());
                                         },
                                         child: const Text('إلغاء التحديد'),
                                       ),
@@ -217,9 +222,11 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
 
                               // Students List
                               Container(
-                                constraints: const BoxConstraints(maxHeight: 300),
+                                constraints:
+                                    const BoxConstraints(maxHeight: 300),
                                 decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey.shade300),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: ListView.builder(
@@ -227,7 +234,8 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
                                   itemCount: _availableStudents.length,
                                   itemBuilder: (context, index) {
                                     final student = _availableStudents[index];
-                                    final isSelected = _selectedStudentIds.contains(student.id);
+                                    final isSelected = _selectedStudentIds
+                                        .contains(student.id);
 
                                     return CheckboxListTile(
                                       title: Text(student.name),
@@ -238,7 +246,8 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
                                           if (value == true) {
                                             _selectedStudentIds.add(student.id);
                                           } else {
-                                            _selectedStudentIds.remove(student.id);
+                                            _selectedStudentIds
+                                                .remove(student.id);
                                           }
                                         });
                                       },
@@ -248,12 +257,16 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
                               ),
                             ],
                           );
+                        } else if (state is StudentsError) {
+                          return Center(
+                            child: Text(state.message),
+                          );
                         }
                         return const SizedBox.shrink();
                       },
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Note
                     TextFormField(
                       controller: _noteController,
@@ -265,7 +278,7 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
                       ),
                     ),
                     const SizedBox(height: 32),
-                    
+
                     // Save Button
                     SizedBox(
                       width: double.infinity,
@@ -278,7 +291,8 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
                             ? const SizedBox(
                                 height: 20,
                                 width: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : Text(
                                 widget.template == null
@@ -309,7 +323,15 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
   }
 
   String _getDayName(int day) {
-    const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+    const days = [
+      'الأحد',
+      'الإثنين',
+      'الثلاثاء',
+      'الأربعاء',
+      'الخميس',
+      'الجمعة',
+      'السبت'
+    ];
     return days[day % 7];
   }
 
@@ -343,4 +365,3 @@ class _TemplateFormScreenState extends State<TemplateFormScreen> {
     }
   }
 }
-

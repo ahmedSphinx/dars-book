@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../../core/routing/routes.dart';
 import '../bloc/app_lock_bloc.dart';
@@ -54,7 +53,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
             _isBiometricAvailable = state.available;
           });
         } else if (state is AppLockError) {
-          EasyLoading.showError('فشل في التحقق من الهوية');
+          EasyLoading.showError('فشل في التحقق من الهوية ${state.message}');
           setState(() {
             _isAuthenticating = false;
           });
@@ -72,7 +71,8 @@ class _AppLockScreenState extends State<AppLockScreen> {
             _isAuthenticating = false;
           });
         } else if (state is BiometricNotEnrolledState) {
-          EasyLoading.showError('لم يتم تسجيل البصمة. يرجى إعداد البصمة في إعدادات الجهاز');
+          EasyLoading.showError(
+              'لم يتم تسجيل البصمة. يرجى إعداد البصمة في إعدادات الجهاز');
           setState(() {
             _isAuthenticating = false;
           });
@@ -324,10 +324,50 @@ class _PinVerificationDialog extends StatefulWidget {
 class _PinVerificationDialogState extends State<_PinVerificationDialog> {
   String _enteredPin = '';
   bool _isVerifying = false;
+  int _failedAttempts = 0;
+  static const int _maxFailedAttempts = 3;
+
+  @override
+  void initState() {
+    super.initState();
+    // Reset failed attempts when dialog opens
+    _failedAttempts = 0;
+  }
+
+  @override
+  void dispose() {
+    // Clean up any resources if needed
+    // Note: BLoC events should NOT be added in dispose()
+    // The BLoC will handle state management independently
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
+    return BlocListener<AppLockBloc, AppLockState>(
+      listener: (context, state) {
+        if (state is AppUnlocked) {
+          Navigator.of(context).pop(); // Close dialog first
+          // Navigation to dashboard will be handled by the main AppLockScreen
+        } else if (state is AppLockError) {
+          _failedAttempts++;
+          if (_failedAttempts >= _maxFailedAttempts) {
+            EasyLoading.showError(
+                'تم تجاوز عدد المحاولات المسموح. يرجى المحاولة لاحقاً');
+            Navigator.of(context).pop(); // Close dialog after max attempts
+            // Reset failed attempts for next time
+            _failedAttempts = 0;
+          } else {
+            EasyLoading.showError(
+                'رمز القفل غير صحيح. المحاولة $_failedAttempts/$_maxFailedAttempts');
+          }
+          setState(() {
+            _enteredPin = '';
+            _isVerifying = false;
+          });
+        }
+      },
+      child: Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
       ),
@@ -398,20 +438,26 @@ class _PinVerificationDialogState extends State<_PinVerificationDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(4, (index) {
+                  Color indicatorColor;
+                  if (_failedAttempts > 0 && index < _enteredPin.length) {
+                    indicatorColor = Colors.red; // Show red for failed attempts
+                  } else if (index < _enteredPin.length) {
+                    indicatorColor = const Color(0xFF1F21A8);
+                  } else {
+                    indicatorColor = Colors.grey.shade300;
+                  }
+
                 return Container(
                   margin: const EdgeInsets.symmetric(horizontal: 8),
                   width: 16,
                   height: 16,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: index < _enteredPin.length
-                        ? const Color(0xFF1F21A8)
-                        : Colors.grey.shade300,
+                      color: indicatorColor,
                     boxShadow: index < _enteredPin.length
                         ? [
                             BoxShadow(
-                              color: const Color(0xFF1F21A8)
-                                  .withValues(alpha: 0.3),
+                                color: indicatorColor.withValues(alpha: 0.3),
                               blurRadius: 4,
                               offset: const Offset(0, 2),
                             ),
@@ -456,6 +502,7 @@ class _PinVerificationDialogState extends State<_PinVerificationDialog> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -576,7 +623,7 @@ class _PinVerificationDialogState extends State<_PinVerificationDialog> {
   }
 
   void _onNumberTap(String number) {
-    if (_enteredPin.length < 4) {
+    if (_enteredPin.length < 4 && !_isVerifying) {
       setState(() {
         _enteredPin += number;
       });
@@ -600,28 +647,7 @@ class _PinVerificationDialogState extends State<_PinVerificationDialog> {
       _isVerifying = true;
     });
 
-    try {
-      final secureStorage = const FlutterSecureStorage();
-      final storedPin = await secureStorage.read(key: 'app_pin');
-
-      if (storedPin == _enteredPin) {
-        if (mounted) {
-          Navigator.of(context).pop(); // Close dialog
-          Navigator.pushReplacementNamed(context, Routes.dashboard);
-        }
-      } else {
-        EasyLoading.showError('رمز القفل غير صحيح');
-        setState(() {
-          _enteredPin = '';
-          _isVerifying = false;
-        });
-      }
-    } catch (e) {
-      EasyLoading.showError('حدث خطأ في التحقق من الرمز');
-      setState(() {
-        _enteredPin = '';
-        _isVerifying = false;
-      });
-    }
+    // Use BLoC for PIN verification instead of direct storage access
+    context.read<AppLockBloc>().add(VerifyPinEvent(_enteredPin));
   }
 }

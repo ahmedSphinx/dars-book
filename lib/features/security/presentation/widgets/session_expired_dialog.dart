@@ -36,10 +36,13 @@ class SessionExpiredDialog extends StatelessWidget {
 
   /// Show the session expired dialog
   static void show(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const SessionExpiredDialog(),
-    );
+    // Ensure we have a valid context with Navigator
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const SessionExpiredDialog(),
+      );
+    }
   }
 }
