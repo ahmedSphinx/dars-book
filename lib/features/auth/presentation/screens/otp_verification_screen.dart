@@ -93,39 +93,35 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         color: Theme.of(context).primaryColor,
                       ),
                       const SizedBox(height: 32),
-                      
+
                       // Title
                       Text(
                         'تم إرسال رمز التحقق إلى الرقم',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
-                      
+
                       Text(
                         widget.phoneNumber,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Theme.of(context).primaryColor,
-                          fontWeight: FontWeight.bold,
-                        ),
+                              color: Theme.of(context).primaryColor,
+                              fontWeight: FontWeight.bold,
+                            ),
                         textAlign: TextAlign.center,
                         textDirection: TextDirection.ltr,
                       ),
                       const SizedBox(height: 48),
-                      
+
                       // OTP Input
                       TextFormField(
                         controller: _otpController,
                         keyboardType: TextInputType.number,
                         textAlign: TextAlign.center,
                         textDirection: TextDirection.ltr,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          letterSpacing: 8,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: /*  Theme.of(context).textTheme.bodyMedium?. */ TextStyle(color: Colors.black),
                         decoration: InputDecoration(
                           hintText: '------',
                           hintStyle: const TextStyle(letterSpacing: 8),
@@ -144,7 +140,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         },
                       ),
                       const SizedBox(height: 32),
-                      
+
                       // Verify Button
                       ElevatedButton(
                         onPressed: state is AuthLoading
@@ -180,7 +176,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                               ),
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Resend OTP
                       TextButton(
                         onPressed: () {
@@ -199,4 +195,3 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     );
   }
 }
-

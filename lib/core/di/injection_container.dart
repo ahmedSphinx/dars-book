@@ -49,7 +49,7 @@ Future<void> initializeDependencies() async {
   sl.registerLazySingleton(() => FirebaseFirestore.instance);
   sl.registerLazySingleton(() => FirebaseFunctions.instance);
   sl.registerLazySingleton(() => const FlutterSecureStorage());
-  
+
   // Services
   sl.registerLazySingleton(() => SessionService());
 
@@ -57,27 +57,27 @@ Future<void> initializeDependencies() async {
   sl.registerLazySingleton<AuthRepository>(
     () => AuthRepositoryImpl(firebaseAuth: sl()),
   );
-  
+
   sl.registerLazySingleton<StudentRepository>(
     () => StudentRepositoryImpl(firestore: sl(), firebaseAuth: sl()),
   );
-  
+
   sl.registerLazySingleton<PriceRepository>(
     () => PriceRepositoryImpl(firestore: sl(), firebaseAuth: sl()),
   );
-  
+
   sl.registerLazySingleton<SessionRepository>(
     () => SessionRepositoryImpl(firestore: sl(), firebaseAuth: sl()),
   );
-  
+
   sl.registerLazySingleton<TemplateRepository>(
     () => TemplateRepositoryImpl(firestore: sl(), firebaseAuth: sl()),
   );
-  
+
   sl.registerLazySingleton<PaymentRepository>(
     () => PaymentRepositoryImpl(firestore: sl(), firebaseAuth: sl()),
   );
-  
+
   sl.registerLazySingleton<ReportRepository>(
     () => ReportRepositoryImpl(
       firestore: sl(),
@@ -85,7 +85,7 @@ Future<void> initializeDependencies() async {
       functions: sl(),
     ),
   );
-  
+
   sl.registerLazySingleton<SubscriptionRepository>(
     () => SubscriptionRepositoryImpl(
       firestore: sl(),
@@ -93,7 +93,7 @@ Future<void> initializeDependencies() async {
       functions: sl(),
     ),
   );
-  
+
   sl.registerLazySingleton<SettingsRepository>(
     () => SettingsRepositoryImpl(secureStorage: sl()),
   );
@@ -107,11 +107,11 @@ Future<void> initializeDependencies() async {
 
   // BLoCs/Cubits
   sl.registerFactory(() => AuthBloc(authRepository: sl()));
-  
+
   sl.registerFactory(() => StudentsBloc(studentRepository: sl()));
-  
+
   sl.registerFactory(() => PricesBloc(priceRepository: sl()));
-  
+
   sl.registerFactory(
     () => SessionsBloc(
       sessionRepository: sl(),
@@ -119,28 +119,27 @@ Future<void> initializeDependencies() async {
       priceRepository: sl(),
     ),
   );
-  
+
   sl.registerFactory(() => TemplatesBloc(templateRepository: sl()));
-  
+
   sl.registerFactory(
     () => PaymentsBloc(
       paymentRepository: sl(),
       studentRepository: sl(),
     ),
   );
-  
+
   sl.registerFactory(
     () => ReportsBloc(reportRepository: sl()),
   );
-  
+
   sl.registerFactory(
     () => CollectionsBloc(reportRepository: sl()),
   );
-  
+
   sl.registerFactory(() => SubscriptionBloc(subscriptionRepository: sl()));
-  
-  sl.registerFactory(() => SettingsBloc(settingsRepository: sl()));
-  
+
+  // Register AppLockBloc first (lazy singleton)
   sl.registerLazySingleton(
     () => AppLockBloc(
       settingsRepository: sl(),
@@ -149,8 +148,25 @@ Future<void> initializeDependencies() async {
     ),
   );
 
+  // Register SettingsBloc and set up bidirectional synchronization
+  sl.registerFactory(() {
+    final settingsBloc = SettingsBloc(settingsRepository: sl());
+    final appLockBloc = sl<AppLockBloc>();
+
+    // SettingsBloc -> AppLockBloc: When settings change, update lock status
+    settingsBloc.setSecurityChangeCallback(() {
+      appLockBloc.add(CheckLockStatusEvent());
+    });
+
+    // AppLockBloc -> SettingsBloc: When PIN changes, reload settings
+    appLockBloc.setSettingsChangeCallback(() {
+      settingsBloc.add(LoadSettingsEvent());
+    });
+
+    return settingsBloc;
+  });
+
   sl.registerFactory(
     () => TeacherProfileBloc(teacherRepository: sl()),
   );
 }
-

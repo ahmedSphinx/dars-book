@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../domain/repositories/settings_repository.dart';
-
-
+import '../../../../core/services/app_logging_services.dart';
 
 abstract class SettingsEvent extends Equatable {
   const SettingsEvent();
@@ -135,6 +134,10 @@ class SettingsState extends Equatable {
 class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   final SettingsRepository settingsRepository;
 
+  // Optional AppLockBloc for synchronization (injected via DI or null if not needed)
+  // This will be set via a method after initialization
+  void Function()? _onSecuritySettingChanged;
+
   SettingsBloc({required this.settingsRepository}) : super(const SettingsState()) {
     on<LoadSettingsEvent>(_onLoadSettings);
     on<SetThemeModeEvent>(_onSetThemeMode);
@@ -149,15 +152,23 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     add(LoadSettingsEvent());
   }
 
+  /// Set callback for security settings changes
+  void setSecurityChangeCallback(void Function() callback) {
+    _onSecuritySettingChanged = callback;
+  }
+
+  /// Notify security bloc of changes
+  void _notifySecurityChange() {
+    _onSecuritySettingChanged?.call();
+  }
+
   Future<void> _onLoadSettings(
     LoadSettingsEvent event,
     Emitter<SettingsState> emit,
   ) async {
     final language = settingsRepository.getLanguage();
-    final locale = language == 'ar' 
-        ? const Locale('ar', 'SA') 
-        : const Locale('en', 'US');
-    
+    final locale = language == 'ar' ? const Locale('ar', 'SA') : const Locale('en', 'US');
+
     emit(SettingsState(
       themeMode: settingsRepository.getThemeMode(),
       language: language,
@@ -183,9 +194,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   ) async {
     await settingsRepository.setLanguage(event.languageCode);
     // Create appropriate locale based on language code
-    final locale = event.languageCode == 'ar' 
-        ? const Locale('ar', 'SA') 
-        : const Locale('en', 'US');
+    final locale = event.languageCode == 'ar' ? const Locale('ar', 'SA') : const Locale('en', 'US');
     emit(state.copyWith(
       language: event.languageCode,
       locale: locale,
@@ -212,34 +221,82 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     SetBiometricEnabledEvent event,
     Emitter<SettingsState> emit,
   ) async {
-    await settingsRepository.setBiometricEnabled(event.enabled);
-    emit(state.copyWith(biometricEnabled: event.enabled));
+    try {
+      await settingsRepository.setBiometricEnabled(event.enabled);
+      emit(state.copyWith(biometricEnabled: event.enabled));
+
+      // Notify security bloc to check lock status
+      _notifySecurityChange();
+
+      // Validate: Can't disable biometric if PIN is also disabled
+      if (!event.enabled && !state.pinEnabled) {
+        AppLogging.logError('Warning: Both biometric and PIN are disabled. App will be unlocked.');
+      }
+    } catch (e) {
+      AppLogging.logError('Error setting biometric enabled: $e');
+      rethrow;
+    }
   }
 
   Future<void> _onSetPinEnabled(
     SetPinEnabledEvent event,
     Emitter<SettingsState> emit,
   ) async {
-    await settingsRepository.setPinEnabled(event.enabled);
-    emit(state.copyWith(pinEnabled: event.enabled));
+    try {
+      // Validation: Can't disable PIN if biometric is also disabled
+      if (!event.enabled && !state.biometricEnabled) {
+        final errorMsg = settingsRepository.getLanguage() == 'ar' ? 'لا يمكن تعطيل رمز القفل عند تعطيل البصمة. يرجى تفعيل البصمة أولاً.' : 'Cannot disable PIN when biometric is also disabled. Enable biometric first.';
+        throw StateError(errorMsg);
+      }
+
+      await settingsRepository.setPinEnabled(event.enabled);
+      emit(state.copyWith(pinEnabled: event.enabled));
+
+      // Notify security bloc to check lock status
+      _notifySecurityChange();
+    } catch (e) {
+      AppLogging.logError('Error setting PIN enabled: $e');
+      rethrow;
+    }
   }
 
   Future<void> _onSetPin(
     SetPinEvent event,
     Emitter<SettingsState> emit,
   ) async {
-    await settingsRepository.setPin(event.pin);
-    await settingsRepository.setPinEnabled(true);
-    emit(state.copyWith(pinEnabled: true));
+    try {
+      await settingsRepository.setPin(event.pin);
+      await settingsRepository.setPinEnabled(true);
+      emit(state.copyWith(pinEnabled: true));
+
+      // Notify security bloc to check lock status
+      _notifySecurityChange();
+    } catch (e) {
+      AppLogging.logError('Error setting PIN: $e');
+      rethrow;
+    }
   }
 
   Future<void> _onClearPin(
     ClearPinEvent event,
     Emitter<SettingsState> emit,
   ) async {
-    await settingsRepository.clearPin();
-    await settingsRepository.setPinEnabled(false);
-    emit(state.copyWith(pinEnabled: false));
+    try {
+      // Validation: Can't clear PIN if biometric is also disabled
+      if (!state.biometricEnabled) {
+        final errorMsg = settingsRepository.getLanguage() == 'ar' ? 'لا يمكن حذف رمز القفل عند تعطيل البصمة. يرجى تفعيل البصمة أولاً.' : 'Cannot clear PIN when biometric is disabled. Enable biometric first.';
+        throw StateError(errorMsg);
+      }
+
+      await settingsRepository.clearPin();
+      await settingsRepository.setPinEnabled(false);
+      emit(state.copyWith(pinEnabled: false));
+
+      // Notify security bloc to check lock status
+      _notifySecurityChange();
+    } catch (e) {
+      AppLogging.logError('Error clearing PIN: $e');
+      rethrow;
+    }
   }
 }
-

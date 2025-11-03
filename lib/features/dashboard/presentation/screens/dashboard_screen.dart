@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/routing/routes.dart';
+import '../../../../core/services/app_logging_services.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
 import '../../../reports/presentation/bloc/reports_bloc.dart';
@@ -21,8 +22,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen>
-    with TickerProviderStateMixin {
+class _DashboardScreenState extends State<DashboardScreen> with TickerProviderStateMixin {
   AnimationController? _animationController;
   AnimationController? _fabAnimationController;
   Animation<double>? _fadeAnimation;
@@ -32,7 +32,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   void initState() {
     super.initState();
     _initializeAnimations();
-    _loadDashboard();
+    // Load dashboard data after a short delay to ensure BLoCs are ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadDashboard();
+    });
     // _checkAppLock();
   }
 
@@ -94,16 +97,38 @@ class _DashboardScreenState extends State<DashboardScreen>
     final startOfMonth = DateTime(now.year, now.month, 1);
     final endOfMonth = DateTime(now.year, now.month + 1, 0);
 
-    // Load dashboard data
-    context.read<ReportsBloc>().add(
-          LoadDashboardSummary(
-            startDate: startOfMonth,
-            endDate: endOfMonth,
-          ),
-        );
+    AppLogging.logInfo('🔄 Loading dashboard data...');
+    AppLogging.logInfo('📅 Date range: ${startOfMonth.toIso8601String()} to ${endOfMonth.toIso8601String()}');
 
-    // Load students for lists
-    context.read<StudentsBloc>().add(LoadStudents());
+    try {
+      // Check if BLoCs are available
+      final reportsBloc = context.read<ReportsBloc>();
+      final studentsBloc = context.read<StudentsBloc>();
+      final subscriptionBloc = context.read<SubscriptionBloc>();
+
+      AppLogging.logInfo('📊 BLoCs available: ReportsBloc=${reportsBloc.runtimeType}, StudentsBloc=${studentsBloc.runtimeType}, SubscriptionBloc=${subscriptionBloc.runtimeType}');
+
+      // Load dashboard data
+      reportsBloc.add(LoadDashboardSummary(startDate: startOfMonth, endDate: endOfMonth));
+      AppLogging.logInfo('📊 Dispatched LoadDashboardSummary event');
+
+      // Load students for lists
+      studentsBloc.add(const LoadStudents());
+      AppLogging.logInfo('👥 Dispatched LoadStudents event');
+
+      // Load subscription data
+      subscriptionBloc.add(const LoadSubscription());
+      AppLogging.logInfo('💳 Dispatched LoadSubscription event');
+    } catch (e) {
+      AppLogging.logError('❌ Error loading dashboard data: $e');
+      // Retry after a short delay
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          AppLogging.logInfo('🔄 Retrying dashboard data load...');
+          _loadDashboard();
+        }
+      });
+    }
   }
 
   void _startSession() {
@@ -135,16 +160,129 @@ class _DashboardScreenState extends State<DashboardScreen>
       );
     } catch (e) {
       // Fallback navigation if named route fails
-      debugPrint('Failed to navigate to lock screen: $e');
+      AppLogging.logError('Failed to navigate to lock screen: $e');
       // Could implement fallback navigation here if needed
     }
   }
 
-  bool get _areAnimationsReady =>
-      _animationController != null &&
-      _fabAnimationController != null &&
-      _fadeAnimation != null &&
-      _slideAnimation != null;
+  bool get _areAnimationsReady => _animationController != null && _fabAnimationController != null && _fadeAnimation != null && _slideAnimation != null;
+
+  /// Handle AppLock state changes
+  void _handleAppLockState(BuildContext context, AppLockState state) {
+    if (state is AppLocked) {
+      // Cleanup resources before navigation
+      _cleanupResources();
+      // Navigate to lock screen with proper error handling
+      _navigateToLockScreen(context);
+    } else if (state is AppUnlocked) {
+      _startSession();
+    } else if (state is SessionExpired) {
+      // SessionExpiredDialog.show(context); // Handled in app.dart
+    } else if (state is AppLockError) {
+      // Handle AppLock errors gracefully
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في الأمان: ${state.message}'),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'إعادة المحاولة',
+            onPressed: _checkAppLock,
+          ),
+        ),
+      );
+    } else if (state is BiometricErrorState) {
+      // Handle biometric errors
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في البصمة: ${state.error.userFriendlyMessage}'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+
+  /// Handle Subscription state changes
+  void _handleSubscriptionState(BuildContext context, SubscriptionState state) {
+    AppLogging.logInfo('💳 SubscriptionState: ${state.runtimeType}');
+
+    if (state is SubscriptionError) {
+      AppLogging.logError('❌ SubscriptionError: ${state.message}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في الاشتراك: ${state.message}'),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'إعادة المحاولة',
+            onPressed: () {
+              context.read<SubscriptionBloc>().add(LoadSubscription());
+            },
+          ),
+        ),
+      );
+    } else if (state is SubscriptionRedeemed) {
+      AppLogging.logInfo('✅ SubscriptionRedeemed');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم استرداد الاشتراك بنجاح'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else if (state is SubscriptionLoaded) {
+      AppLogging.logInfo('✅ SubscriptionLoaded: ${state.subscription != null ? 'Active' : 'No subscription'}');
+    } else if (state is SubscriptionLoading) {
+      AppLogging.logInfo('⏳ SubscriptionLoading...');
+    }
+  }
+
+  /// Handle Students state changes
+  void _handleStudentsState(BuildContext context, StudentsState state) {
+    AppLogging.logInfo('👥 StudentsState: ${state.runtimeType}');
+
+    if (state is StudentsError) {
+      AppLogging.logError('❌ StudentsError: ${state.message}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في تحميل الطلاب: ${state.message}'),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'إعادة المحاولة',
+            onPressed: () {
+              context.read<StudentsBloc>().add(const LoadStudents());
+            },
+          ),
+        ),
+      );
+    } else if (state is StudentsLoaded) {
+      AppLogging.logInfo('✅ StudentsLoaded: ${state.students.length} students');
+    } else if (state is StudentsLoading) {
+      AppLogging.logInfo('⏳ StudentsLoading...');
+    }
+  }
+
+  /// Handle Reports state changes
+  void _handleReportsState(BuildContext context, ReportsState state) {
+    AppLogging.logInfo('📊 ReportsState: ${state.runtimeType}');
+
+    if (state is ReportsError) {
+      AppLogging.logError('❌ ReportsError: ${state.message}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في تحميل التقارير: ${state.message}'),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'إعادة المحاولة',
+            onPressed: () {
+              _loadDashboard();
+            },
+          ),
+        ),
+      );
+    } else if (state is DashboardSummaryLoaded) {
+      AppLogging.logInfo('✅ DashboardSummaryLoaded: ${state.summary}');
+    } else if (state is ReportsLoading) {
+      AppLogging.logInfo('⏳ ReportsLoading...');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,195 +290,336 @@ class _DashboardScreenState extends State<DashboardScreen>
       providers: [
         BlocProvider(create: (_) => sl<ReportsBloc>()),
         BlocProvider(create: (_) => sl<StudentsBloc>()),
+        BlocProvider(create: (_) => sl<SubscriptionBloc>()),
       ],
-      child: BlocListener<AppLockBloc, AppLockState>(
-        listener: (context, state) {
-          if (state is AppLocked) {
-            // Cleanup resources before navigation
-            _cleanupResources();
-
-            // Navigate to lock screen with proper error handling
-            _navigateToLockScreen(context);
-          } else if (state is AppUnlocked) {
-            _startSession();
-          } else if (state is SessionExpired) {
-            //  SessionExpiredDialog.show(context);
-          } else if (state is AppLockError) {
-            // Handle AppLock errors gracefully
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('خطأ في الأمان: ${state.message}'),
-                backgroundColor: Colors.red,
-                action: SnackBarAction(
-                  label: 'إعادة المحاولة',
-                  onPressed: _checkAppLock,
-                ),
-              ),
-            );
-          } else if (state is BiometricErrorState) {
-            // Handle biometric errors
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content:
-                    Text('خطأ في البصمة: ${state.error.userFriendlyMessage}'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-          }
-        },
+      child: MultiBlocListener(
+        listeners: [
+          BlocListener<AppLockBloc, AppLockState>(
+            listener: (context, state) {
+              _handleAppLockState(context, state);
+            },
+          ),
+          BlocListener<SubscriptionBloc, SubscriptionState>(
+            listener: (context, state) {
+              _handleSubscriptionState(context, state);
+            },
+          ),
+          BlocListener<StudentsBloc, StudentsState>(
+            listener: (context, state) {
+              _handleStudentsState(context, state);
+            },
+          ),
+          BlocListener<ReportsBloc, ReportsState>(
+            listener: (context, state) {
+              _handleReportsState(context, state);
+            },
+          ),
+        ],
         child: SessionTimeoutWarning(
           child: Scaffold(
-            appBar: _buildAppBar(context),
-            drawer: _buildDrawer(context),
-            body: RefreshIndicator(
-              onRefresh: _refreshDashboard,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverPadding(
-                    padding: EdgeInsets.all(16.w),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate([
-                        // Subscription Banner
-                        _buildSubscriptionBanner(context),
-                        SizedBox(height: 16.h),
-
-                        // Dashboard Summary
-                        _buildDashboardSummary(context),
-                        SizedBox(height: 24.h),
-
-                        // Quick Actions
-                        _buildQuickActions(context),
-                        SizedBox(height: 24.h),
-
-                        // Students Lists
-                        _buildStudentsLists(context),
-                        SizedBox(height: 100.h), // Space for FAB
-                      ]),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            floatingActionButton: _buildFloatingActionButton(context),
+            appBar: _buildModernAppBar(context),
+            drawer: _buildModernDrawer(context),
+            body: _buildModernBody(context),
+            floatingActionButton: _buildModernFloatingActionButton(context),
             floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+            bottomNavigationBar: _buildBottomNavigationBar(context),
           ),
         ),
       ),
     );
   }
 
-  // App Bar
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
+  /// Build modern app bar with enhanced UX
+  PreferredSizeWidget _buildModernAppBar(BuildContext context) {
     return AppBar(
-      title: Text(
-        'لوحة التحكم',
-        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
+      title: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(8.w),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Theme.of(context).colorScheme.primary,
+                  Theme.of(context).colorScheme.primaryContainer,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12.r),
             ),
+            child: Icon(
+              Icons.dashboard_rounded,
+              color: Theme.of(context).colorScheme.onPrimary,
+              size: 20.sp,
+            ),
+          ),
+          SizedBox(width: 12.w),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'لوحة التحكم',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+              ),
+              Text(
+                'مرحباً بك',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+              ),
+            ],
+          ),
+        ],
       ),
-      actions: [
-        // Session Status Indicator
-        BlocBuilder<AppLockBloc, AppLockState>(
-          builder: (context, state) {
-            if (state is SessionActive) {
-              return Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border:
-                      Border.all(color: Colors.green.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.timer,
-                      size: 16,
-                      color: Colors.green.shade700,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${state.remainingSeconds}s',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.green.shade700,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            } else if (state is AppLocked) {
-              return Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.lock,
-                      size: 16,
-                      color: Colors.red.shade700,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'مقفل',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.red.shade700,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.security),
-          onPressed: () => Navigator.pushNamed(context, Routes.sessionTest),
-          tooltip: 'Session Test',
-        ),
-        IconButton(
-          icon: const Icon(Icons.palette),
-          onPressed: () => Navigator.pushNamed(context, Routes.themeTest),
-          tooltip: 'Theme Test',
-        ),
-        IconButton(
-          icon: const Icon(Icons.settings),
-          onPressed: () => Navigator.pushNamed(context, Routes.settings),
-        ),
-      ],
+      centerTitle: false,
       elevation: 0,
-      scrolledUnderElevation: 1,
+      scrolledUnderElevation: 2,
+      surfaceTintColor: Theme.of(context).colorScheme.surface,
+      actions: [
+        _buildSessionStatusIndicator(context),
+        _buildNotificationButton(context),
+        _buildSettingsButton(context),
+        SizedBox(width: 8.w),
+      ],
     );
   }
 
-  // Drawer
-  Widget _buildDrawer(BuildContext context) {
-    return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          _buildDrawerHeader(context),
-          _buildDrawerItems(context),
+  /// Build session status indicator with enhanced animations
+  Widget _buildSessionStatusIndicator(BuildContext context) {
+    return BlocBuilder<AppLockBloc, AppLockState>(
+      builder: (context, state) {
+        if (state is SessionActive) {
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            margin: EdgeInsets.only(right: 8.w),
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.green.shade400,
+                  Colors.green.shade600,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20.r),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.green.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.timer_rounded,
+                  size: 16.sp,
+                  color: Colors.white,
+                ),
+                SizedBox(width: 4.w),
+                Text(
+                  '${state.remainingSeconds}s',
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          );
+        } else if (state is AppLocked) {
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            margin: EdgeInsets.only(right: 8.w),
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.red.shade400,
+                  Colors.red.shade600,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20.r),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.red.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.lock_rounded,
+                  size: 16.sp,
+                  color: Colors.white,
+                ),
+                SizedBox(width: 4.w),
+                Text(
+                  'مقفل',
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
+  /// Build notification button with badge
+  Widget _buildNotificationButton(BuildContext context) {
+    return Stack(
+      children: [
+        IconButton(
+          icon: Icon(
+            Icons.notifications_outlined,
+            size: 24.sp,
+          ),
+          onPressed: () {
+            // TODO: Implement notifications
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('قريباً: نظام الإشعارات')),
+            );
+          },
+          tooltip: 'الإشعارات',
+        ),
+        Positioned(
+          right: 8.w,
+          top: 8.h,
+          child: Container(
+            width: 8.w,
+            height: 8.h,
+            decoration: BoxDecoration(
+              color: Colors.red,
+              borderRadius: BorderRadius.circular(4.r),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build settings button with haptic feedback
+  Widget _buildSettingsButton(BuildContext context) {
+    return IconButton(
+      icon: Icon(
+        Icons.settings_outlined,
+        size: 24.sp,
+      ),
+      onPressed: () {
+        // Add haptic feedback
+        // HapticFeedback.lightImpact();
+        Navigator.pushNamed(context, Routes.settings);
+      },
+      tooltip: 'الإعدادات',
+    );
+  }
+
+  /// Build modern body with enhanced scroll behavior
+  Widget _buildModernBody(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: _refreshDashboard,
+      color: Theme.of(context).colorScheme.primary,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      child: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          // Hero section with gradient background
+          SliverToBoxAdapter(
+            child: _buildHeroSection(context),
+          ),
+
+          // Main content with proper spacing
+          SliverPadding(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                // Debug/Refresh Button (temporary)
+                _buildDebugSection(context),
+                SizedBox(height: 16.h),
+
+                // Subscription Banner
+                _buildSubscriptionBanner(context),
+                SizedBox(height: 16.h),
+
+                // Dashboard Summary
+                _buildDashboardSummary(context),
+                SizedBox(height: 24.h),
+
+                // Quick Actions
+                _buildQuickActions(context),
+                SizedBox(height: 24.h),
+
+                // Students Lists
+                _buildStudentsLists(context),
+                SizedBox(height: 100.h), // Space for FAB
+              ]),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildDrawerHeader(BuildContext context) {
-    return DrawerHeader(
+  /// Build debug section for testing data loading
+  Widget _buildDebugSection(BuildContext context) {
+    return Card(
+      color: Colors.blue.shade50,
+      child: Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Column(
+          children: [
+            Text(
+              'Debug Section',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
+            ),
+            SizedBox(height: 8.h),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () {
+                    AppLogging.logInfo('🔄 Manual refresh triggered');
+                    _loadDashboard();
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Refresh Data'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    AppLogging.logInfo('📊 Testing ReportsBloc state');
+                    final reportsBloc = context.read<ReportsBloc>();
+                    AppLogging.logInfo('ReportsBloc current state: ${reportsBloc.state}');
+                  },
+                  icon: const Icon(Icons.analytics),
+                  label: const Text('Check State'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build hero section with welcome message
+  Widget _buildHeroSection(BuildContext context) {
+    return Container(
+      height: 120.h,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -351,95 +630,376 @@ class _DashboardScreenState extends State<DashboardScreen>
           ],
         ),
       ),
+      child: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(16.w),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'مرحباً بك في DarsBook',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onPrimary,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              SizedBox(height: 4.h),
+              Text(
+                'إدارة طلابك وحصصك بسهولة',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.9),
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build modern drawer with enhanced design
+  Widget _buildModernDrawer(BuildContext context) {
+    return Drawer(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: Theme.of(context).colorScheme.onPrimary,
-            child: Icon(
-              Icons.school,
-              size: 32.sp,
-              color: Theme.of(context).colorScheme.primary,
+          _buildModernDrawerHeader(context),
+          Expanded(
+            child: _buildModernDrawerItems(context),
+          ),
+          _buildModernDrawerFooter(context),
+        ],
+      ),
+    );
+  }
+
+  /// Build modern drawer header
+  Widget _buildModernDrawerHeader(BuildContext context) {
+    return Container(
+      height: 200.h,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Theme.of(context).colorScheme.primary,
+            Theme.of(context).colorScheme.primaryContainer,
+          ],
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(16.w),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              CircleAvatar(
+                radius: 30.r,
+                backgroundColor: Theme.of(context).colorScheme.onPrimary,
+                child: Icon(
+                  Icons.school_rounded,
+                  size: 32.sp,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              SizedBox(height: 12.h),
+              Text(
+                'DarsBook',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onPrimary,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              Text(
+                'إدارة الطلاب والحصص',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.9),
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build modern drawer items
+  Widget _buildModernDrawerItems(BuildContext context) {
+    final drawerItems = [
+      _ModernDrawerItem(
+        icon: Icons.dashboard_rounded,
+        title: 'لوحة التحكم',
+        route: Routes.dashboard,
+        isSelected: true,
+      ),
+      _ModernDrawerItem(
+        icon: Icons.people_rounded,
+        title: 'الطلاب',
+        route: Routes.students,
+        isSelected: false,
+      ),
+      _ModernDrawerItem(
+        icon: Icons.event_rounded,
+        title: 'الحصص',
+        route: Routes.sessions,
+        isSelected: false,
+      ),
+      _ModernDrawerItem(
+        icon: Icons.monetization_on_rounded,
+        title: 'الأسعار',
+        route: Routes.pricing,
+        isSelected: false,
+      ),
+      _ModernDrawerItem(
+        icon: Icons.payments_rounded,
+        title: 'التحصيلات',
+        route: Routes.collections,
+        isSelected: false,
+      ),
+      _ModernDrawerItem(
+        icon: Icons.event_repeat_rounded,
+        title: 'القوالب',
+        route: Routes.templates,
+        isSelected: false,
+      ),
+      _ModernDrawerItem(
+        icon: Icons.analytics_rounded,
+        title: 'التقارير',
+        route: Routes.reports,
+        isSelected: false,
+      ),
+    ];
+
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        ...drawerItems.map((item) => _buildModernDrawerTile(context, item)),
+        const Divider(),
+        _buildModernDrawerTile(
+          context,
+          _ModernDrawerItem(
+            icon: Icons.card_membership_rounded,
+            title: 'الاشتراك',
+            route: Routes.subscription,
+            isSelected: false,
+          ),
+        ),
+        _buildModernDrawerTile(
+          context,
+          _ModernDrawerItem(
+            icon: Icons.settings_rounded,
+            title: 'الإعدادات',
+            route: Routes.settings,
+            isSelected: false,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build modern drawer tile
+  Widget _buildModernDrawerTile(BuildContext context, _ModernDrawerItem item) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12.r),
+        color: item.isSelected ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.1) : null,
+      ),
+      child: ListTile(
+        leading: Container(
+          padding: EdgeInsets.all(8.w),
+          decoration: BoxDecoration(
+            color: item.isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8.r),
+          ),
+          child: Icon(
+            item.icon,
+            color: item.isSelected ? Theme.of(context).colorScheme.onPrimary : Theme.of(context).colorScheme.onSurfaceVariant,
+            size: 20.sp,
+          ),
+        ),
+        title: Text(
+          item.title,
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontWeight: item.isSelected ? FontWeight.bold : FontWeight.normal,
+                color: item.isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
+              ),
+        ),
+        onTap: () {
+          Navigator.pop(context);
+          if (item.route.isNotEmpty) {
+            Navigator.pushNamed(context, item.route);
+          }
+        },
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.r),
+        ),
+      ),
+    );
+  }
+
+  /// Build modern drawer footer
+  Widget _buildModernDrawerFooter(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(16.w),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+          ),
+        ),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            leading: Container(
+              padding: EdgeInsets.all(8.w),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              child: Icon(
+                Icons.logout_rounded,
+                color: Colors.red.shade600,
+                size: 20.sp,
+              ),
             ),
-          ),
-          SizedBox(height: 12.h),
-          Text(
-            'DarsBook',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          Text(
-            'إدارة الطلاب والحصص',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onPrimary
-                      .withValues(alpha: 0.9),
-                ),
+            title: Text(
+              'تسجيل الخروج',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Colors.red.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              _showLogoutDialog(context);
+            },
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12.r),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDrawerItems(BuildContext context) {
-    final drawerItems = [
-      _DrawerItem(Icons.dashboard, 'لوحة التحكم', Routes.dashboard, true),
-      _DrawerItem(Icons.people, 'الطلاب', Routes.students, false),
-      _DrawerItem(Icons.event, 'الحصص', Routes.sessions, false),
-      _DrawerItem(Icons.monetization_on, 'الأسعار', Routes.pricing, false),
-      _DrawerItem(Icons.payments, 'التحصيلات', Routes.collections, false),
-      _DrawerItem(Icons.event_repeat, 'القوالب', Routes.templates, false),
-      _DrawerItem(Icons.analytics, 'التقارير', Routes.reports, false),
-    ];
-
-    return Column(
-      children: [
-        ...drawerItems.map((item) => _buildDrawerTile(context, item)),
-        const Divider(),
-        _buildDrawerTile(
-          context,
-          _DrawerItem(
-              Icons.card_membership, 'الاشتراك', Routes.subscription, false),
+  /// Build modern floating action button with accessibility
+  Widget _buildModernFloatingActionButton(BuildContext context) {
+    return Semantics(
+      label: 'إنشاء حصة جديدة',
+      hint: 'اضغط لإنشاء حصة جديدة',
+      button: true,
+      child: FloatingActionButton.extended(
+        onPressed: () => Navigator.pushNamed(context, Routes.createSession),
+        icon: Icon(
+          Icons.add_rounded,
+          size: 24.sp,
         ),
-        _buildDrawerTile(
-          context,
-          _DrawerItem(Icons.settings, 'الإعدادات', Routes.settings, false),
+        label: Text(
+          'حصة جديدة',
+          style: TextStyle(
+            fontSize: 14.sp,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-        const Divider(),
-        _buildDrawerTile(
-          context,
-          _DrawerItem(Icons.logout, 'تسجيل الخروج', '', false, isLogout: true),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16.r),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildDrawerTile(BuildContext context, _DrawerItem item) {
-    return ListTile(
-      leading: Icon(
-        item.icon,
-        color: item.isLogout ? Colors.red : null,
-      ),
-      title: Text(
-        item.title,
-        style: TextStyle(
-          color: item.isLogout ? Colors.red : null,
+  /// Build bottom navigation bar
+  Widget _buildBottomNavigationBar(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+          ),
         ),
       ),
-      selected: item.isSelected,
-      onTap: () {
-        Navigator.pop(context);
-        if (item.isLogout) {
-          _showLogoutDialog(context);
-        } else if (item.route.isNotEmpty) {
-          Navigator.pushNamed(context, item.route);
-        }
-      },
+      child: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildBottomNavItem(
+                context,
+                icon: Icons.dashboard_rounded,
+                label: 'الرئيسية',
+                isSelected: true,
+                onTap: () {},
+              ),
+              _buildBottomNavItem(
+                context,
+                icon: Icons.people_rounded,
+                label: 'الطلاب',
+                isSelected: false,
+                onTap: () => Navigator.pushNamed(context, Routes.students),
+              ),
+              _buildBottomNavItem(
+                context,
+                icon: Icons.event_rounded,
+                label: 'الحصص',
+                isSelected: false,
+                onTap: () => Navigator.pushNamed(context, Routes.sessions),
+              ),
+              _buildBottomNavItem(
+                context,
+                icon: Icons.analytics_rounded,
+                label: 'التقارير',
+                isSelected: false,
+                onTap: () => Navigator.pushNamed(context, Routes.reports),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build bottom navigation item
+  Widget _buildBottomNavItem(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+        decoration: BoxDecoration(
+          color: isSelected ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.1) : null,
+          borderRadius: BorderRadius.circular(12.r),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              size: 20.sp,
+            ),
+            SizedBox(height: 2.h),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -447,94 +1007,279 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildSubscriptionBanner(BuildContext context) {
     return BlocBuilder<SubscriptionBloc, SubscriptionState>(
       builder: (context, state) {
-        if (state is SubscriptionLoaded && state.subscription != null) {
+        AppLogging.logInfo('💳 SubscriptionBanner UI State: ${state.runtimeType}');
+
+        if (state is SubscriptionLoading) {
+          return _buildSubscriptionLoadingBanner();
+        } else if (state is SubscriptionError) {
+          return _buildSubscriptionErrorBanner(context, state.message);
+        } else if (state is SubscriptionLoaded && state.subscription != null) {
           final subscription = state.subscription!;
-          if (subscription.remainingDays <= 7) {
-            return _areAnimationsReady
-                ? FadeTransition(
-                    opacity: _fadeAnimation!,
-                    child: SlideTransition(
-                      position: _slideAnimation!,
-                      child: Card(
-                        elevation: 2,
-                        color: Colors.orange.shade50,
-                        child: Padding(
-                          padding: EdgeInsets.all(16.w),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.warning_amber,
-                                color: Colors.orange.shade700,
-                                size: 24.sp,
+          return _buildSubscriptionContent(context, subscription);
+        } else if (state is SubscriptionLoaded && state.subscription == null) {
+          return _buildNoSubscriptionBanner(context);
+        } else if (state is SubscriptionInitial) {
+          return const SizedBox.shrink();
+        } else {
+          return const Text('Unknown subscription state');
+        }
+      },
+    );
+  }
+
+  /// Build subscription loading banner
+  Widget _buildSubscriptionLoadingBanner() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 20.w,
+              height: 20.w,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12.w),
+            Text(
+              'جاري تحميل بيانات الاشتراك...',
+              style: TextStyle(fontSize: 14.sp),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build subscription error banner
+  Widget _buildSubscriptionErrorBanner(BuildContext context, String errorMessage) {
+    return Card(
+      elevation: 2,
+      color: Colors.red.shade50,
+      child: Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Row(
+          children: [
+            Icon(
+              Icons.error_outline,
+              color: Colors.red.shade700,
+              size: 24.sp,
+            ),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: Text(
+                'خطأ في تحميل الاشتراك: $errorMessage',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.red.shade900,
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                context.read<SubscriptionBloc>().add(const LoadSubscription());
+              },
+              child: const Text('إعادة المحاولة'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build no subscription banner
+  Widget _buildNoSubscriptionBanner(BuildContext context) {
+    return Card(
+      elevation: 2,
+      color: Colors.blue.shade50,
+      child: Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Row(
+          children: [
+            Icon(
+              Icons.info_outline,
+              color: Colors.blue.shade700,
+              size: 24.sp,
+            ),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: Text(
+                'لا يوجد اشتراك نشط',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.blue.shade900,
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pushNamed(context, Routes.subscription),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.blue.shade700,
+              ),
+              child: const Text('اشتراك جديد'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build subscription content based on status
+  Widget _buildSubscriptionContent(BuildContext context, dynamic subscription) {
+    if (subscription.remainingDays <= 0) {
+      return _buildExpiredSubscriptionBanner(context, subscription);
+    } else if (subscription.remainingDays <= 7) {
+      return _buildExpiringSubscriptionBanner(context, subscription);
+    } else {
+      return _buildActiveSubscriptionBanner(context, subscription);
+    }
+  }
+
+  /// Build expired subscription banner
+  Widget _buildExpiredSubscriptionBanner(BuildContext context, dynamic subscription) {
+    return Card(
+      elevation: 2,
+      color: Colors.red.shade50,
+      child: Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Row(
+          children: [
+            Icon(
+              Icons.cancel,
+              color: Colors.red.shade700,
+              size: 24.sp,
+            ),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: Text(
+                'انتهت صلاحية الاشتراك',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.red.shade900,
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pushNamed(context, Routes.subscription),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+              ),
+              child: const Text('تجديد الاشتراك'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build expiring subscription banner
+  Widget _buildExpiringSubscriptionBanner(BuildContext context, dynamic subscription) {
+    return _areAnimationsReady
+        ? FadeTransition(
+            opacity: _fadeAnimation!,
+            child: SlideTransition(
+              position: _slideAnimation!,
+              child: Card(
+                elevation: 2,
+                color: Colors.orange.shade50,
+                child: Padding(
+                  padding: EdgeInsets.all(16.w),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber,
+                        color: Colors.orange.shade700,
+                        size: 24.sp,
+                      ),
+                      SizedBox(width: 12.w),
+                      Expanded(
+                        child: Text(
+                          'تبقى ${subscription.remainingDays} يومًا على انتهاء الاشتراك',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Colors.orange.shade900,
+                                fontWeight: FontWeight.w500,
                               ),
-                              SizedBox(width: 12.w),
-                              Expanded(
-                                child: Text(
-                                  'تبقى ${subscription.remainingDays} يومًا على انتهاء الاشتراك',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(
-                                        color: Colors.orange.shade900,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                ),
-                              ),
-                              FilledButton(
-                                onPressed: () => Navigator.pushNamed(
-                                    context, Routes.subscription),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.orange.shade700,
-                                ),
-                                child: const Text('تجديد الاشتراك'),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
-                    ),
-                  )
-                : Card(
-                    elevation: 2,
-                    color: Colors.orange.shade50,
-                    child: Padding(
-                      padding: EdgeInsets.all(16.w),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.warning_amber,
-                            color: Colors.orange.shade700,
-                            size: 24.sp,
-                          ),
-                          SizedBox(width: 12.w),
-                          Expanded(
-                            child: Text(
-                              'تبقى ${subscription.remainingDays} يومًا على انتهاء الاشتراك',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                    color: Colors.orange.shade900,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                            ),
-                          ),
-                          FilledButton(
-                            onPressed: () => Navigator.pushNamed(
-                                context, Routes.subscription),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: Colors.orange.shade700,
-                            ),
-                            child: const Text('تجديد الاشتراك'),
-                          ),
-                        ],
+                      FilledButton(
+                        onPressed: () => Navigator.pushNamed(context, Routes.subscription),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.orange.shade700,
+                        ),
+                        child: const Text('تجديد الاشتراك'),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          )
+        : Card(
+            elevation: 2,
+            color: Colors.orange.shade50,
+            child: Padding(
+              padding: EdgeInsets.all(16.w),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber,
+                    color: Colors.orange.shade700,
+                    size: 24.sp,
+                  ),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: Text(
+                      'تبقى ${subscription.remainingDays} يومًا على انتهاء الاشتراك',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.orange.shade900,
+                            fontWeight: FontWeight.w500,
+                          ),
                     ),
-                  );
-          }
-        }
-        return const SizedBox.shrink();
-      },
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pushNamed(context, Routes.subscription),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.orange.shade700,
+                    ),
+                    child: const Text('تجديد الاشتراك'),
+                  ),
+                ],
+              ),
+            ),
+          );
+  }
+
+  /// Build active subscription banner
+  Widget _buildActiveSubscriptionBanner(BuildContext context, dynamic subscription) {
+    return Card(
+      elevation: 2,
+      color: Colors.green.shade50,
+      child: Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Row(
+          children: [
+            Icon(
+              Icons.check_circle,
+              color: Colors.green.shade700,
+              size: 24.sp,
+            ),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: Text(
+                'اشتراك نشط - يتبقى ${subscription.remainingDays} يومًا',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.green.shade900,
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pushNamed(context, Routes.subscription),
+              child: const Text('عرض التفاصيل'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -542,42 +1287,344 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildDashboardSummary(BuildContext context) {
     return BlocBuilder<ReportsBloc, ReportsState>(
       builder: (context, state) {
+        AppLogging.logInfo('📊 DashboardSummary UI State: ${state.runtimeType}');
+
         if (state is ReportsLoading) {
-          return _buildLoadingSkeleton();
+          return _buildDashboardLoadingState();
         } else if (state is DashboardSummaryLoaded) {
-          final summary = state.summary;
-          return _areAnimationsReady
-              ? FadeTransition(
-                  opacity: _fadeAnimation!,
-                  child: SlideTransition(
-                    position: _slideAnimation!,
-                    child: Column(
-                      children: [
-                        // Stats Cards Grid
-                        _buildStatsGrid(context, summary),
-                        SizedBox(height: 16.h),
-
-                        // Revenue Card
-                        _buildRevenueCard(context, summary),
-                      ],
-                    ),
-                  ),
-                )
-              : Column(
-                  children: [
-                    // Stats Cards Grid
-                    _buildStatsGrid(context, summary),
-                    SizedBox(height: 16.h),
-
-                    // Revenue Card
-                    _buildRevenueCard(context, summary),
-                  ],
-                );
+          return _buildDashboardContent(context, state.summary);
         } else if (state is ReportsError) {
-          return _buildErrorState(context, state.message);
+          return _buildDashboardErrorState(context, state.message);
+        } else if (state is ReportsInitial) {
+          return _buildDashboardInitialState(context);
         }
-        return const SizedBox.shrink();
+        return _buildDashboardUnknownState(context);
       },
+    );
+  }
+
+  /// Build dashboard loading state with enhanced skeleton
+  Widget _buildDashboardLoadingState() {
+    return Column(
+      children: [
+        // Stats Grid Skeleton
+        Row(
+          children: [
+            Expanded(child: _buildEnhancedSkeletonCard(height: 120.h)),
+            SizedBox(width: 12.w),
+            Expanded(child: _buildEnhancedSkeletonCard(height: 120.h)),
+          ],
+        ),
+        SizedBox(height: 16.h),
+        // Revenue Card Skeleton
+        _buildEnhancedSkeletonCard(height: 100.h),
+        SizedBox(height: 16.h),
+        // Additional Info Skeleton
+        _buildEnhancedSkeletonCard(height: 80.h),
+      ],
+    );
+  }
+
+  /// Build dashboard content with animations
+  Widget _buildDashboardContent(BuildContext context, dynamic summary) {
+    final content = Column(
+      children: [
+        // Stats Cards Grid
+        _buildStatsGrid(context, summary),
+        SizedBox(height: 16.h),
+
+        // Revenue Card
+        _buildRevenueCard(context, summary),
+        SizedBox(height: 16.h),
+
+        // Additional Metrics
+        _buildAdditionalMetrics(context, summary),
+      ],
+    );
+
+    return _areAnimationsReady
+        ? FadeTransition(
+            opacity: _fadeAnimation!,
+            child: SlideTransition(
+              position: _slideAnimation!,
+              child: content,
+            ),
+          )
+        : content;
+  }
+
+  /// Build dashboard error state with enhanced error handling
+  Widget _buildDashboardErrorState(BuildContext context, String message) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 48.sp,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            SizedBox(height: 16.h),
+            Text(
+              'خطأ في تحميل بيانات لوحة التحكم',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              message,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 16.h),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _loadDashboard,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('إعادة المحاولة'),
+                ),
+                SizedBox(width: 12.w),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.pushNamed(context, Routes.reports),
+                  icon: const Icon(Icons.analytics),
+                  label: const Text('عرض التقارير'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build dashboard initial state
+  Widget _buildDashboardInitialState(BuildContext context) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          children: [
+            Icon(
+              Icons.dashboard,
+              size: 48.sp,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            SizedBox(height: 16.h),
+            Text(
+              'مرحباً بك في لوحة التحكم',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              'ابدأ بإضافة طلابك وإنشاء حصصك الأولى',
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 16.h),
+            FilledButton.icon(
+              onPressed: () {
+                AppLogging.logInfo('🔄 Manual dashboard load triggered from initial state');
+                _loadDashboard();
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('تحميل البيانات'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build unknown state fallback
+  Widget _buildDashboardUnknownState(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          children: [
+            Icon(
+              Icons.help_outline,
+              size: 48.sp,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            SizedBox(height: 16.h),
+            Text(
+              'حالة غير معروفة',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              'يرجى إعادة تحميل الصفحة',
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 16.h),
+            FilledButton.icon(
+              onPressed: _loadDashboard,
+              icon: const Icon(Icons.refresh),
+              label: const Text('إعادة التحميل'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build additional metrics section
+  Widget _buildAdditionalMetrics(BuildContext context, dynamic summary) {
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'مؤشرات إضافية',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            SizedBox(height: 12.h),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildMetricItem(
+                    context,
+                    'متوسط الحصص/طالب',
+                    '${(summary.sessionsCount / (summary.studentsCount > 0 ? summary.studentsCount : 1)).toStringAsFixed(1)}',
+                    Icons.trending_up,
+                    Colors.blue,
+                  ),
+                ),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: _buildMetricItem(
+                    context,
+                    'متوسط الإيراد/حصة',
+                    '${(summary.totalRevenue / (summary.sessionsCount > 0 ? summary.sessionsCount : 1)).toStringAsFixed(0)} ج.م',
+                    Icons.attach_money,
+                    Colors.green,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build metric item
+  Widget _buildMetricItem(
+    BuildContext context,
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: EdgeInsets.all(12.w),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8.r),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16.sp),
+              SizedBox(width: 4.w),
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 4.h),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build enhanced skeleton card with shimmer effect
+  Widget _buildEnhancedSkeletonCard({required double height}) {
+    return Card(
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12.r),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.grey.shade300,
+              Colors.grey.shade200,
+              Colors.grey.shade300,
+            ],
+            stops: const [0.0, 0.5, 1.0],
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(16.w),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40.w,
+                height: 40.w,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
+              ),
+              SizedBox(height: 12.h),
+              Container(
+                width: double.infinity,
+                height: 16.h,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(4.r),
+                ),
+              ),
+              SizedBox(height: 8.h),
+              Container(
+                width: 80.w,
+                height: 12.h,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(4.r),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -593,10 +1640,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             gradient: LinearGradient(
               colors: [
                 Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                Theme.of(context)
-                    .colorScheme
-                    .primaryContainer
-                    .withValues(alpha: 0.1),
+                Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.1),
               ],
             ),
           ),
@@ -611,10 +1655,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             gradient: LinearGradient(
               colors: [
                 Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.1),
-                Theme.of(context)
-                    .colorScheme
-                    .tertiaryContainer
-                    .withValues(alpha: 0.1),
+                Theme.of(context).colorScheme.tertiaryContainer.withValues(alpha: 0.1),
               ],
             ),
           ),
@@ -633,78 +1674,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       gradient: LinearGradient(
         colors: [
           Theme.of(context).colorScheme.secondary.withValues(alpha: 0.1),
-          Theme.of(context)
-              .colorScheme
-              .secondaryContainer
-              .withValues(alpha: 0.1),
+          Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.1),
         ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingSkeleton() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(child: _buildSkeletonCard(height: 120.h)),
-            SizedBox(width: 12.w),
-            Expanded(child: _buildSkeletonCard(height: 120.h)),
-          ],
-        ),
-        SizedBox(height: 16.h),
-        _buildSkeletonCard(height: 100.h),
-      ],
-    );
-  }
-
-  Widget _buildSkeletonCard({required double height}) {
-    return Card(
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade300,
-          borderRadius: BorderRadius.circular(12.r),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorState(BuildContext context, String message) {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(24.w),
-        child: Column(
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48.sp,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            SizedBox(height: 16.h),
-            Text(
-              'حدث خطأ في تحميل البيانات',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            SizedBox(height: 8.h),
-            Text(
-              message,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.7),
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 16.h),
-            FilledButton.icon(
-              onPressed: _loadDashboard,
-              icon: const Icon(Icons.refresh),
-              label: const Text('إعادة المحاولة'),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -712,22 +1683,23 @@ class _DashboardScreenState extends State<DashboardScreen>
   // Quick Actions
   Widget _buildQuickActions(BuildContext context) {
     final actions = [
-      _QuickAction(
-        icon: Icons.add_circle,
+      _EnhancedQuickAction(
+        icon: Icons.add_circle_rounded,
         title: 'حصة جديدة',
         subtitle: 'إنشاء حصة جديدة',
         color: Theme.of(context).colorScheme.primary,
         onTap: () => Navigator.pushNamed(context, Routes.createSession),
+        badge: 'جديد',
       ),
-      _QuickAction(
-        icon: Icons.people_alt,
+      _EnhancedQuickAction(
+        icon: Icons.people_alt_rounded,
         title: 'إضافة طالب',
         subtitle: 'تسجيل طالب جديد',
         color: Theme.of(context).colorScheme.tertiary,
         onTap: () => Navigator.pushNamed(context, Routes.students),
       ),
-      _QuickAction(
-        icon: Icons.analytics,
+      _EnhancedQuickAction(
+        icon: Icons.analytics_rounded,
         title: 'التقارير',
         subtitle: 'عرض التقارير',
         color: Theme.of(context).colorScheme.secondary,
@@ -738,78 +1710,140 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'إجراءات سريعة',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+        Row(
+          children: [
+            Icon(
+              Icons.flash_on_rounded,
+              color: Theme.of(context).colorScheme.primary,
+              size: 24.sp,
+            ),
+            SizedBox(width: 8.w),
+            Text(
+              'إجراءات سريعة',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: () {
+                // TODO: Show all quick actions
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('قريباً: المزيد من الإجراءات')),
+                );
+              },
+              child: const Text('المزيد'),
+            ),
+          ],
         ),
-        SizedBox(height: 12.h),
-        SizedBox(
-          height: 120.h,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: actions.length,
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: EdgeInsets.only(right: 12.w),
-                child: _buildQuickActionCard(context, actions[index]),
-              );
-            },
-          ),
-        ),
+        SizedBox(height: 16.h),
+        _buildEnhancedQuickActionsGrid(context, actions),
       ],
     );
   }
 
-  Widget _buildQuickActionCard(BuildContext context, _QuickAction action) {
-    return SizedBox(
-      width: 140.w,
-      child: Card(
-        elevation: 2,
-        child: InkWell(
-          onTap: action.onTap,
-          borderRadius: BorderRadius.circular(12.r),
-          child: Padding(
-            padding: EdgeInsets.all(8.w),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: EdgeInsets.all(12.w),
-                  decoration: BoxDecoration(
-                    color: action.color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12.r),
+  /// Build enhanced quick actions grid
+  Widget _buildEnhancedQuickActionsGrid(BuildContext context, List<_EnhancedQuickAction> actions) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 12.w,
+        mainAxisSpacing: 12.h,
+        childAspectRatio: 0.8,
+      ),
+      itemCount: actions.length,
+      itemBuilder: (context, index) {
+        final action = actions[index];
+        return _buildEnhancedQuickActionCard(context, action);
+      },
+    );
+  }
+
+  /// Build enhanced quick action card
+  Widget _buildEnhancedQuickActionCard(BuildContext context, _EnhancedQuickAction action) {
+    return GestureDetector(
+      onTap: action.onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              action.color.withValues(alpha: 0.1),
+              action.color.withValues(alpha: 0.05),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16.r),
+          border: Border.all(
+            color: action.color.withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(16.w),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Stack(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(12.w),
+                    decoration: BoxDecoration(
+                      color: action.color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    child: Icon(
+                      action.icon,
+                      color: action.color,
+                      size: 24.sp,
+                    ),
                   ),
-                  child: Icon(
-                    action.icon,
-                    color: action.color,
-                    size: 24.sp,
-                  ),
-                ),
-                SizedBox(height: 8.h),
-                Text(
-                  action.title,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
+                  if (action.badge != null)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(8.r),
+                        ),
+                        child: Text(
+                          action.badge!,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 8.sp,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 4.h),
-                Text(
-                  action.subtitle,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.7),
-                      ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+                    ),
+                ],
+              ),
+              SizedBox(height: 12.h),
+              Text(
+                action.title,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: action.color,
+                    ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: 4.h),
+              Text(
+                action.subtitle,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ),
       ),
@@ -820,12 +1854,24 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildStudentsLists(BuildContext context) {
     return BlocBuilder<StudentsBloc, StudentsState>(
       builder: (context, state) {
-        if (state is StudentsLoaded) {
+        AppLogging.logInfo('👥 StudentsLists UI State: ${state.runtimeType}');
+
+        if (state is StudentsLoading) {
+          return _buildStudentsLoadingState();
+        } else if (state is StudentsError) {
+          return _buildStudentsErrorState(context, state.message);
+        } else if (state is StudentsLoaded) {
           final students = state.students;
-          final overdueStudents =
-              students.where((s) => _isStudentOverdue(s)).toList();
-          final onTimeStudents =
-              students.where((s) => !_isStudentOverdue(s)).toList();
+          AppLogging.logInfo('👥 StudentsLoaded: ${students.length} students');
+
+          if (students.isEmpty) {
+            return _buildNoStudentsState(context);
+          }
+
+          final overdueStudents = students.where((s) => _isStudentOverdue(s)).toList();
+          final onTimeStudents = students.where((s) => !_isStudentOverdue(s)).toList();
+
+          AppLogging.logInfo('👥 Overdue students: ${overdueStudents.length}, On-time students: ${onTimeStudents.length}');
 
           return Column(
             children: [
@@ -851,8 +1897,159 @@ class _DashboardScreenState extends State<DashboardScreen>
             ],
           );
         }
-        return const SizedBox.shrink();
+        return _buildStudentsInitialState(context);
       },
+    );
+  }
+
+  /// Build students loading state
+  Widget _buildStudentsLoadingState() {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          children: [
+            SizedBox(
+              width: 40.w,
+              height: 40.w,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            ),
+            SizedBox(height: 16.h),
+            Text(
+              'جاري تحميل الطلاب...',
+              style: TextStyle(fontSize: 16.sp),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build students error state
+  Widget _buildStudentsErrorState(BuildContext context, String errorMessage) {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 48.sp,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            SizedBox(height: 16.h),
+            Text(
+              'خطأ في تحميل الطلاب',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              errorMessage,
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 16.h),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.read<StudentsBloc>().add(const LoadStudents());
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('إعادة المحاولة'),
+                ),
+                SizedBox(width: 12.w),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.pushNamed(context, Routes.students),
+                  icon: const Icon(Icons.add),
+                  label: const Text('إضافة طالب'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build no students state
+  Widget _buildNoStudentsState(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          children: [
+            Icon(
+              Icons.people_outline,
+              size: 48.sp,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            SizedBox(height: 16.h),
+            Text(
+              'لا يوجد طلاب',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              'ابدأ بإضافة طلابك الأول',
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 16.h),
+            FilledButton.icon(
+              onPressed: () => Navigator.pushNamed(context, Routes.students),
+              icon: const Icon(Icons.add),
+              label: const Text('إضافة طالب جديد'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build students initial state
+  Widget _buildStudentsInitialState(BuildContext context) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          children: [
+            Icon(
+              Icons.school,
+              size: 48.sp,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            SizedBox(height: 16.h),
+            Text(
+              'إدارة الطلاب',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              'ابدأ بإضافة طلابك وإدارة حصصهم',
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 16.h),
+            FilledButton.icon(
+              onPressed: () {
+                AppLogging.logInfo('👥 Navigating to students screen from initial state');
+                Navigator.pushNamed(context, Routes.students);
+              },
+              icon: const Icon(Icons.people),
+              label: const Text('عرض الطلاب'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -908,9 +2105,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   radius: 20.r,
                   backgroundColor: color.withValues(alpha: 0.1),
                   child: Text(
-                    student.name.isNotEmpty
-                        ? student.name[0].toUpperCase()
-                        : '?',
+                    student.name.isNotEmpty ? student.name[0].toUpperCase() : '?',
                     style: TextStyle(
                       color: color,
                       fontWeight: FontWeight.bold,
@@ -953,30 +2148,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   // Floating Action Button
-  Widget _buildFloatingActionButton(BuildContext context) {
-    return _areAnimationsReady
-        ? FadeTransition(
-            opacity: _fadeAnimation!,
-            child: ScaleTransition(
-              scale: _fadeAnimation!,
-              child: FloatingActionButton.extended(
-                onPressed: () =>
-                    Navigator.pushNamed(context, Routes.createSession),
-                icon: const Icon(Icons.add),
-                label: const Text('إنشاء حصة'),
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Theme.of(context).colorScheme.onPrimary,
-              ),
-            ),
-          )
-        : FloatingActionButton.extended(
-            onPressed: () => Navigator.pushNamed(context, Routes.createSession),
-            icon: const Icon(Icons.add),
-            label: const Text('إنشاء حصة'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            foregroundColor: Theme.of(context).colorScheme.onPrimary,
-          );
-  }
 
   // Helper Methods
   bool _isStudentOverdue(Student student) {
@@ -1015,37 +2186,6 @@ class _DashboardScreenState extends State<DashboardScreen>
 }
 
 // Helper Classes
-class _DrawerItem {
-  final IconData icon;
-  final String title;
-  final String route;
-  final bool isSelected;
-  final bool isLogout;
-
-  const _DrawerItem(
-    this.icon,
-    this.title,
-    this.route,
-    this.isSelected, {
-    this.isLogout = false,
-  });
-}
-
-class _QuickAction {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _QuickAction({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-}
 
 // Modern Stat Card
 class _ModernStatCard extends StatelessWidget {
@@ -1097,11 +2237,10 @@ class _ModernStatCard extends StatelessWidget {
                   if (!isLarge)
                     Text(
                       value,
-                      style:
-                          Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: color,
-                              ),
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
                     ),
                 ],
               ),
@@ -1109,10 +2248,7 @@ class _ModernStatCard extends StatelessWidget {
               Text(
                 title,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.7),
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
                       fontWeight: FontWeight.w500,
                     ),
               ),
@@ -1183,4 +2319,38 @@ class _ModernSectionHeader extends StatelessWidget {
       ],
     );
   }
+}
+
+// Modern Drawer Item
+class _ModernDrawerItem {
+  final IconData icon;
+  final String title;
+  final String route;
+  final bool isSelected;
+
+  const _ModernDrawerItem({
+    required this.icon,
+    required this.title,
+    required this.route,
+    required this.isSelected,
+  });
+}
+
+// Enhanced Quick Action
+class _EnhancedQuickAction {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  final String? badge;
+
+  const _EnhancedQuickAction({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+    this.badge,
+  });
 }

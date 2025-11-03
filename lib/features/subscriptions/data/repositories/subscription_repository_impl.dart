@@ -18,10 +18,15 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     required this.functions,
   });
 
-  String get _userId => firebaseAuth.currentUser?.uid ?? '';
+  String get _userId {
+    final user = firebaseAuth.currentUser;
+    if (user == null) {
+      throw Exception('المستخدم غير مسجل الدخول');
+    }
+    return user.uid;
+  }
 
-  DocumentReference get _teacherDoc =>
-      firestore.collection('teachers').doc(_userId);
+  DocumentReference get _teacherDoc => firestore.collection('teachers').doc(_userId);
 
   @override
   Future<Either<Failure, Subscription?>> getSubscriptionStatus() async {
@@ -49,22 +54,37 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
   @override
   Future<Either<Failure, Subscription>> redeemVoucher(String voucherCode) async {
     try {
+      // Validate input
+      if (voucherCode.trim().isEmpty) {
+        return Left(ServerFailure('كود القسيمة مطلوب'));
+      }
+
+      if (voucherCode.trim().length < 6) {
+        return Left(ServerFailure('كود القسيمة يجب أن يكون 6 أحرف على الأقل'));
+      }
+
       final callable = functions.httpsCallable('redeemVoucher');
-      final result = await callable.call({'code': voucherCode});
+      final result = await callable.call({'code': voucherCode.trim().toUpperCase()});
 
       final subscriptionData = result.data as Map<String, dynamic>;
+
+      // Validate response data
+      if (subscriptionData['tier'] == null || subscriptionData['expiresAt'] == null) {
+        return Left(ServerFailure('بيانات الاشتراك غير صحيحة'));
+      }
+
       final subscription = SubscriptionModel(
         tier: subscriptionData['tier'] as String,
         expiresAt: DateTime.parse(subscriptionData['expiresAt'] as String),
-        isActive: subscriptionData['isActive'] as bool,
+        isActive: subscriptionData['isActive'] as bool? ?? false,
         graceDays: subscriptionData['graceDays'] as int? ?? 0,
       );
 
       return Right(subscription);
     } on FirebaseFunctionsException catch (e) {
-      return Left(ServerFailure(e.message ?? 'Failed to redeem voucher'));
+      return Left(ServerFailure(e.message ?? 'فشل في استبدال القسيمة'));
     } catch (e) {
-      return Left(ServerFailure(e.toString()));
+      return Left(ServerFailure('خطأ في استبدال القسيمة: ${e.toString()}'));
     }
   }
 
@@ -82,4 +102,3 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     });
   }
 }
-

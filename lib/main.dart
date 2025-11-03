@@ -24,26 +24,25 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Firebase Stick to the plan
   await FirebaseService.initialize();
-  
-  
+
   // Set BLoC observer
   Bloc.observer = AppBlocObserver();
-  
+
   // Initialize shared preferences
   await AppPreferences().init();
-  
+
   // Initialize dependency injection
   await di.initializeDependencies();
-  
+
   // Initialize session service
   await di.sl<SessionService>().initialize();
 
   runApp(MultiBlocProvider(
     providers: [
-       BlocProvider(create: (_) => di.sl<AuthBloc>()),
+      BlocProvider(create: (_) => di.sl<AuthBloc>()),
       BlocProvider(create: (_) => di.sl<SettingsBloc>()),
       BlocProvider(create: (_) => di.sl<SubscriptionBloc>()),
       BlocProvider(create: (_) => di.sl<AppLockBloc>()..add(CheckLockStatusEvent())),

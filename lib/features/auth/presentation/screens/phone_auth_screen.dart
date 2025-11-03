@@ -67,10 +67,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       // Title
                       Text(
                         'تسجيل الدخول برقم الهاتف',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
                         textAlign: TextAlign.center,
@@ -102,12 +99,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                                 child: DropdownButton<String>(
                                   value: _countryCode,
                                   items: const [
-                                    DropdownMenuItem(
-                                        value: '+20', child: Text('+20')),
-                                    DropdownMenuItem(
-                                        value: '+966', child: Text('+966')),
-                                    DropdownMenuItem(
-                                        value: '+971', child: Text('+971')),
+                                    DropdownMenuItem(value: '+20', child: Text('+20')),
+                                    DropdownMenuItem(value: '+966', child: Text('+966')),
+                                    DropdownMenuItem(value: '+971', child: Text('+971')),
                                   ],
                                   onChanged: (value) {
                                     setState(() {
@@ -118,13 +112,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                               ),
                             ),
                             const SizedBox(width: 12),
-                        
+
                             // Phone Number Field
                             Expanded(
                               child: TextFormField(
                                 controller: _phoneController,
                                 keyboardType: TextInputType.phone,
                                 textDirection: TextDirection.ltr,
+                                style:/*  Theme.of(context).textTheme.bodyMedium?. */TextStyle(
+                                      color: Colors.black,
+                                    ),
                                 decoration: InputDecoration(
                                   hintText: 'رقم الهاتف',
                                   border: OutlineInputBorder(
@@ -173,8 +170,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                                 width: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
                               )
                             : Text(

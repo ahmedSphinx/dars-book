@@ -19,6 +19,10 @@ class SubscriptionScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
+          if (state is SubscriptionError) {
+            return _buildErrorState(context, state.message);
+          }
+
           if (state is SubscriptionLoaded) {
             final subscription = state.subscription;
             final isActive = subscription != null && subscription.isActive;
@@ -28,6 +32,10 @@ class SubscriptionScreen extends StatelessWidget {
             } else {
               return _buildInactiveSubscription(context);
             }
+          }
+
+          if (state is SubscriptionRedeemed) {
+            return _buildActiveSubscription(context, state.subscription);
           }
 
           return _buildInactiveSubscription(context);
@@ -50,9 +58,7 @@ class SubscriptionScreen extends StatelessWidget {
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: isExpiringSoon
-                    ? [Colors.orange.shade400, Colors.orange.shade600]
-                    : [Colors.green.shade400, Colors.green.shade600],
+                colors: isExpiringSoon ? [Colors.orange.shade400, Colors.orange.shade600] : [Colors.green.shade400, Colors.green.shade600],
               ),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
@@ -81,7 +87,7 @@ class SubscriptionScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  subscription.plan,
+                  subscription.tier.toUpperCase(),
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.9),
                     fontSize: 16,
@@ -91,7 +97,7 @@ class SubscriptionScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          
+
           // Details Card
           Card(
             child: Padding(
@@ -101,8 +107,8 @@ class SubscriptionScreen extends StatelessWidget {
                   _buildDetailRow(
                     context,
                     icon: Icons.calendar_today,
-                    label: 'تاريخ التفعيل',
-                    value: DateFormat.yMMMd('ar').format(subscription.activatedAt),
+                    label: 'نوع الاشتراك',
+                    value: subscription.tier.toUpperCase(),
                   ),
                   const Divider(height: 24),
                   _buildDetailRow(
@@ -119,21 +125,20 @@ class SubscriptionScreen extends StatelessWidget {
                     value: '$daysRemaining يوم',
                     valueColor: isExpiringSoon ? Colors.orange : Colors.green,
                   ),
-                  if (subscription.voucherCode != null) ...[
-                    const Divider(height: 24),
-                    _buildDetailRow(
-                      context,
-                      icon: Icons.card_giftcard,
-                      label: 'كود القسيمة',
-                      value: subscription.voucherCode!,
-                    ),
-                  ],
+                  const Divider(height: 24),
+                  _buildDetailRow(
+                    context,
+                    icon: Icons.security,
+                    label: 'الحالة',
+                    value: subscription.isActive ? 'نشط' : 'غير نشط',
+                    valueColor: subscription.isActive ? Colors.green : Colors.red,
+                  ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 24),
-          
+
           // Renew Button (if expiring soon)
           if (isExpiringSoon)
             SizedBox(
@@ -150,6 +155,69 @@ class SubscriptionScreen extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(BuildContext context, String message) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Error Icon
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.error_outline,
+                size: 80,
+                color: Colors.red.shade400,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Error Message
+            Text(
+              'حدث خطأ',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red.shade700,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Colors.grey.shade600,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+
+            // Retry Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  context.read<SubscriptionBloc>().add(const LoadSubscription());
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('إعادة المحاولة'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -175,7 +243,7 @@ class SubscriptionScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            
+
             // Message
             Text(
               'الاشتراك غير مفعل',
@@ -193,7 +261,7 @@ class SubscriptionScreen extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
-            
+
             // Features
             _buildFeatureItem('✓ إدارة غير محدودة للطلاب'),
             _buildFeatureItem('✓ تسجيل الحصص والمدفوعات'),
@@ -201,7 +269,7 @@ class SubscriptionScreen extends StatelessWidget {
             _buildFeatureItem('✓ نسخ احتياطي سحابي'),
             _buildFeatureItem('✓ دعم فني مباشر'),
             const SizedBox(height: 32),
-            
+
             // Redeem Button
             SizedBox(
               width: double.infinity,
@@ -217,7 +285,7 @@ class SubscriptionScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Contact Support
             TextButton.icon(
               onPressed: () {
@@ -365,4 +433,3 @@ class SubscriptionScreen extends StatelessWidget {
     );
   }
 }
-

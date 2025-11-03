@@ -1,10 +1,10 @@
 name: dars_book
 description: A new Flutter project with Clean Architecture by Abdalluh Essam
 # Flutter version on machine: 3.32.6
-publish_to: 'none'
+publish_to: "none"
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -40,6 +40,7 @@ dependencies:
   # Security
   local_auth: ^2.3.0
   flutter_secure_storage: ^9.2.2
+  crypto: ^3.0.5
   # Export
   pdf: ^3.11.1
   printing: ^5.13.4

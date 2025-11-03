@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
 import '../../domain/repositories/settings_repository.dart';
 import '../../../../core/utils/app_shared_preferences.dart';
 
@@ -104,9 +106,33 @@ class SettingsRepositoryImpl implements SettingsRepository {
     return null;
   }
 
+  /// Hash PIN before storage for security
+  String _hashPin(String pin) {
+    final bytes = utf8.encode(pin);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  /// Verify PIN against stored hash
+  @override
+  Future<bool> verifyPin(String pin) async {
+    final storedHash = await secureStorage.read(key: _pinKey);
+    if (storedHash == null) return false;
+
+    final inputHash = _hashPin(pin);
+    return storedHash == inputHash;
+  }
+
   @override
   Future<void> setPin(String pin) async {
-    await secureStorage.write(key: _pinKey, value: pin);
+    // Validate PIN format before hashing
+    if (pin.length != 4 || !RegExp(r'^\d{4}$').hasMatch(pin)) {
+      throw ArgumentError('PIN must be 4 digits');
+    }
+
+    // Store hashed PIN instead of plain text
+    final hashedPin = _hashPin(pin);
+    await secureStorage.write(key: _pinKey, value: hashedPin);
   }
 
   @override
@@ -114,9 +140,10 @@ class SettingsRepositoryImpl implements SettingsRepository {
     await secureStorage.delete(key: _pinKey);
   }
 
-  // Additional method to get PIN asynchronously
+  @override
   Future<String?> getPinAsync() async {
-    return await secureStorage.read(key: _pinKey);
+    // Return null for security - PIN should never be retrieved
+    // Use verifyPin method instead
+    return null;
   }
 }
-

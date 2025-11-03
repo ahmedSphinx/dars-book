@@ -2,7 +2,6 @@ import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors_new.dart';
-import 'text_theme.dart';
 
 /// Enhanced theme configuration using Flex Color Scheme
 /// Provides professional, accessible colors with Cairo font integration

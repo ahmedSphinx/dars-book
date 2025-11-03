@@ -1,11 +1,12 @@
-import 'dart:developer' as dev;
 import 'package:flutter_bloc/flutter_bloc.dart';
+
+import 'core/services/app_logging_services.dart';
 
 class AppBlocObserver extends BlocObserver {
   @override
   void onCreate(BlocBase bloc) {
     super.onCreate(bloc);
-    dev.log(
+    AppLogging.logInfo(
       '🔍 Bloc Created: ${bloc.runtimeType}',
       name: 'BlocObserver',
     );
@@ -14,7 +15,7 @@ class AppBlocObserver extends BlocObserver {
   @override
   void onChange(BlocBase bloc, Change change) {
     super.onChange(bloc, change);
-    dev.log(
+    AppLogging.logInfo(
       '🔁 Bloc Change: $change',
       name: bloc.runtimeType.toString(),
     );
@@ -22,7 +23,7 @@ class AppBlocObserver extends BlocObserver {
 
   @override
   void onError(BlocBase bloc, Object error, StackTrace stackTrace) {
-    dev.log(
+    AppLogging.logError(
       '❌ Bloc Error: $error',
       name: bloc.runtimeType.toString(),
       error: error,
@@ -33,7 +34,7 @@ class AppBlocObserver extends BlocObserver {
 
   @override
   void onClose(BlocBase bloc) {
-    dev.log(
+    AppLogging.logInfo(
       '🛑 Bloc Closed: ${bloc.runtimeType}',
       name: 'BlocObserver',
     );

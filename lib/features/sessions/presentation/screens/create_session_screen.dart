@@ -45,8 +45,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (_) => sl<SessionsBloc>()),
-        BlocProvider(
-            create: (_) => sl<StudentsBloc>()..add(const LoadStudents())),
+        BlocProvider(create: (_) => sl<StudentsBloc>()..add(const LoadStudents())),
         BlocProvider(create: (_) => sl<PricesBloc>()..add(const LoadPrices())),
       ],
       child: Scaffold(
@@ -55,252 +54,355 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
         ),
         body: BlocConsumer<SessionsBloc, SessionsState>(
           listener: (context, state) {
-            if (state is SessionOperationSuccess) {
-              EasyLoading.showSuccess(state.message);
-              if (context.mounted) {
-                Navigator.pop(context);
-                EasyLoading.dismiss();
-              }
-            } else if (state is SessionsError) {
-              EasyLoading.showError(state.message);
-            }
+            _handleSessionsState(context, state);
           },
           builder: (context, sessionState) {
-            final isLoading = sessionState is SessionsLoading;
+            // _handleSessionsState(context, sessionState);
+            return _buildSessionContent(context, sessionState);
+          },
+        ),
+      ),
+    );
+  }
 
-            return Stepper(
-              currentStep: _currentStep,
-              onStepContinue: isLoading ? null : _onStepContinue,
-              onStepCancel: _currentStep > 0
-                  ? () => setState(() => _currentStep--)
-                  : null,
-              controlsBuilder: (context, details) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Row(
-                    children: [
-                      if (_currentStep < 2)
-                        ElevatedButton(
-                          onPressed: details.onStepContinue,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Theme.of(context).colorScheme.primary,
-                            foregroundColor:
-                                Theme.of(context).colorScheme.onPrimary,
-                          ),
-                          child: Text('التالي'),
-                        ),
-                      if (_currentStep == 2)
-                        ElevatedButton(
-                          onPressed: isLoading ? null : _saveSession,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Theme.of(context).colorScheme.primary,
-                            foregroundColor:
-                                Theme.of(context).colorScheme.onPrimary,
-                          ),
-                          child: isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Text('حفظ الحصة'),
-                        ),
-                      const SizedBox(width: 12),
-                      if (details.onStepCancel != null)
-                        OutlinedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Theme.of(context).colorScheme.primary,
-                            foregroundColor:
-                                Theme.of(context).colorScheme.onPrimary,
-                          ),
-                          onPressed: details.onStepCancel,
-                          child: const Text('السابق'),
-                        ),
-                    ],
+  /// Handle SessionsState changes with comprehensive state management
+  void _handleSessionsState(BuildContext context, SessionsState state) {
+    if (state is SessionOperationSuccess) {
+      EasyLoading.showSuccess(state.message);
+      if (context.mounted) {
+        if (mounted) {
+          // Reset form state
+          _resetForm();
+          // Navigate back after a short delay
+          Future.delayed(const Duration(milliseconds: 1500), () {
+            if (mounted) {}
+          });
+        }
+        Navigator.pop(context, true);
+      }
+    } else if (state is SessionsError) {
+      EasyLoading.showError(state.message);
+      // Reset loading state and show error details
+      setState(() {});
+      _showErrorDialog(context, state.message);
+    } else if (state is SessionsLoading) {
+      // Show loading indicator with specific message
+      EasyLoading.show(
+        status: 'جاري معالجة البيانات...',
+        maskType: EasyLoadingMaskType.black,
+      );
+    }
+  }
+
+  /// Reset form to initial state
+  void _resetForm() {
+    _currentStep = 0;
+    _selectedDate = DateTime.now();
+    _selectedTime = TimeOfDay.now();
+    _hasBooklet = false;
+    _selectedStudentIds.clear();
+    _attendance.clear();
+    _lessonPrices.clear();
+    _bookletPrices.clear();
+    _noteController.clear();
+  }
+
+  /// Show error dialog with retry option
+  void _showErrorDialog(BuildContext context, String errorMessage) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('خطأ في إنشاء الحصة'),
+        content: Text(errorMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Retry the operation
+              _saveSession();
+            },
+            child: const Text('إعادة المحاولة'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build the main content based on SessionsState
+  Widget _buildSessionContent(BuildContext context, SessionsState sessionState) {
+    // Handle different session states
+    if (sessionState is SessionsError) {
+      return _buildErrorState(sessionState);
+    }
+
+    final isLoading = sessionState is SessionsLoading;
+
+    return Stepper(
+      currentStep: _currentStep,
+      onStepContinue: isLoading ? null : _onStepContinue,
+      onStepCancel: _currentStep > 0 ? () => setState(() => _currentStep--) : null,
+      controlsBuilder: (context, details) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: Row(
+            children: [
+              if (_currentStep < 2)
+                ElevatedButton(
+                  onPressed: details.onStepContinue,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
                   ),
-                );
-              },
-              steps: [
-                // Step 1: Session Details
-                Step(
-                  title: const Text('تفاصيل الحصة'),
-                  content: Form(
-                    key: _formKey,
-                    child: Column(
+                  child: const Text('التالي'),
+                ),
+              if (_currentStep == 2)
+                ElevatedButton.icon(
+                  onPressed: isLoading ? null : _saveSession,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
+                  icon: isLoading
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.save),
+                  label: Text(isLoading ? 'جاري الحفظ...' : 'حفظ الحصة'),
+                ),
+              const SizedBox(width: 12),
+              if (details.onStepCancel != null)
+                OutlinedButton(
+                  onPressed: details.onStepCancel,
+                  child: const Text('السابق'),
+                ),
+            ],
+          ),
+        );
+      },
+      steps: [
+        // Step 1: Session Details
+        Step(
+          title: const Text('تفاصيل الحصة'),
+          content: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                // Date Selection
+                ListTile(
+                  leading: const Icon(Icons.calendar_today),
+                  title: const Text('تاريخ الحصة'),
+                  subtitle: Text(
+                    '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: _pickDate,
+                ),
+                const Divider(),
+
+                // Time Selection
+                ListTile(
+                  leading: const Icon(Icons.access_time),
+                  title: const Text('وقت الحصة'),
+                  subtitle: Text(_selectedTime.format(context)),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: _pickTime,
+                ),
+                const Divider(),
+
+                // Booklet Checkbox
+                CheckboxListTile(
+                  title: const Text('يوجد كتيب'),
+                  subtitle: const Text('تحقق إذا كان هناك كتيب للحصة'),
+                  value: _hasBooklet,
+                  onChanged: (value) {
+                    setState(() {
+                      _hasBooklet = value ?? false;
+                    });
+                  },
+                ),
+                const Divider(),
+
+                // Note Field
+                TextFormField(
+                  controller: _noteController,
+                  decoration: const InputDecoration(
+                    labelText: 'ملاحظات (اختياري)',
+                    hintText: 'أضف أي ملاحظات حول الحصة',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+          isActive: _currentStep >= 0,
+        ),
+
+        // Step 2: Select Students
+        Step(
+          title: const Text('اختيار الطلاب'),
+          content: BlocBuilder<StudentsBloc, StudentsState>(
+            builder: (context, state) {
+              if (state is StudentsLoading) {
+                return const Center(child: CircularProgressIndicator());
+              } else if (state is StudentsLoaded) {
+                _availableStudents = state.students.where((s) => s.isActive).toList();
+
+                if (_availableStudents.isEmpty) {
+                  return const Center(child: Text('لا يوجد طلاب نشطين'));
+                }
+
+                return Column(
+                  children: [
+                    // Select All / Deselect All
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        // Date Picker
-                        ListTile(
-                          title: const Text('اختر التاريخ'),
-                          subtitle: Text(
-                            _selectedDate.toString().split(' ')[0],
-                          ),
-                          leading: const Icon(Icons.calendar_today),
-                          trailing:
-                              const Icon(Icons.arrow_forward_ios, size: 16),
-                          onTap: _pickDate,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(color: Colors.grey.shade300),
-                          ),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _selectedStudentIds = _availableStudents.map((s) => s.id).toSet();
+                            });
+                          },
+                          icon: const Icon(Icons.select_all),
+                          label: const Text('تحديد الكل'),
                         ),
-                        const SizedBox(height: 12),
-
-                        // Time Picker
-                        ListTile(
-                          title: const Text('اختر الوقت'),
-                          subtitle: Text(_selectedTime.format(context)),
-                          leading: const Icon(Icons.access_time),
-                          trailing:
-                              const Icon(Icons.arrow_forward_ios, size: 16),
-                          onTap: _pickTime,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(color: Colors.grey.shade300),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Has Booklet Toggle
-                        SwitchListTile(
-                          title: const Text('يحتوي على ملزمة'),
-                          subtitle: Text(_hasBooklet
-                              ? 'يوجد ملزمة للحصة'
-                              : 'لا يوجد ملزمة'),
-                          value: _hasBooklet,
-                          onChanged: (value) =>
-                              setState(() => _hasBooklet = value),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(color: Colors.grey.shade300),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Note Field
-                        TextFormField(
-                          controller: _noteController,
-                          maxLines: 3,
-                          decoration: InputDecoration(
-                            labelText: 'ملاحظات (${'اختياري'})',
-                            border: const OutlineInputBorder(),
-                            alignLabelWithHint: true,
-                          ),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _selectedStudentIds.clear();
+                            });
+                          },
+                          icon: const Icon(Icons.deselect),
+                          label: const Text('إلغاء التحديد'),
                         ),
                       ],
                     ),
-                  ),
-                  isActive: _currentStep >= 0,
-                  state:
-                      _currentStep > 0 ? StepState.complete : StepState.indexed,
-                ),
+                    const SizedBox(height: 16),
 
-                // Step 2: Select Students
-                Step(
-                  title: const Text('اختيار الطلاب'),
-                  content: BlocBuilder<StudentsBloc, StudentsState>(
-                    builder: (context, state) {
-                      if (state is StudentsLoading) {
-                        return const Center(child: CircularProgressIndicator());
-                      } else if (state is StudentsLoaded) {
-                        _availableStudents =
-                            state.students.where((s) => s.isActive).toList();
+                    // Students List
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _availableStudents.length,
+                      itemBuilder: (context, index) {
+                        final student = _availableStudents[index];
+                        final isSelected = _selectedStudentIds.contains(student.id);
 
-                        if (_availableStudents.isEmpty) {
-                          return const Center(
-                              child: Text('لا يوجد طلاب نشطين'));
-                        }
-
-                        return Column(
-                          children: [
-                            // Select All / Deselect All
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  '${_selectedStudentIds.length} طالب محدد',
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium,
-                                ),
-                                Row(
-                                  children: [
-                                    TextButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          _selectedStudentIds =
-                                              _availableStudents
-                                                  .map((s) => s.id)
-                                                  .toSet();
-                                        });
-                                      },
-                                      child: const Text('تحديد الكل'),
-                                    ),
-                                    TextButton(
-                                      onPressed: () {
-                                        setState(
-                                            () => _selectedStudentIds.clear());
-                                      },
-                                      child: const Text('إلغاء التحديد'),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            const Divider(),
-
-                            // Students List
-                            ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _availableStudents.length,
-                              itemBuilder: (context, index) {
-                                final student = _availableStudents[index];
-                                final isSelected =
-                                    _selectedStudentIds.contains(student.id);
-
-                                return CheckboxListTile(
-                                  title: Text(student.name),
-                                  subtitle: Text(student.year),
-                                  value: isSelected,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      if (value == true) {
-                                        _selectedStudentIds.add(student.id);
-                                      } else {
-                                        _selectedStudentIds.remove(student.id);
-                                      }
-                                    });
-                                  },
-                                );
-                              },
-                            ),
-                          ],
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: CheckboxListTile(
+                            title: Text(student.name),
+                            subtitle: Text('السنة: ${student.year}'),
+                            value: isSelected,
+                            onChanged: (value) {
+                              setState(() {
+                                if (value == true) {
+                                  _selectedStudentIds.add(student.id);
+                                } else {
+                                  _selectedStudentIds.remove(student.id);
+                                }
+                              });
+                            },
+                          ),
                         );
-                      } else if (state is StudentsError) {
-                        return Center(
-                          child: Text(state.message),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
+                      },
+                    ),
+                  ],
+                );
+              } else if (state is StudentsError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text('خطأ في تحميل الطلاب: ${state.message}'),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          context.read<StudentsBloc>().add(const LoadStudents());
+                        },
+                        child: const Text('إعادة المحاولة'),
+                      ),
+                    ],
                   ),
-                  isActive: _currentStep >= 1,
-                  state:
-                      _currentStep > 1 ? StepState.complete : StepState.indexed,
-                ),
+                );
+              }
+              return const Center(child: CircularProgressIndicator());
+            },
+          ),
+          isActive: _currentStep >= 1,
+        ),
 
-                // Step 3: Take Attendance
-                Step(
-                  title: const Text('تسجيل الحضور'),
-                  content: _buildAttendanceStep(),
-                  isActive: _currentStep >= 2,
+        // Step 3: Take Attendance
+        Step(
+          title: const Text('تسجيل الحضور'),
+          content: _buildAttendanceStep(),
+          isActive: _currentStep >= 2,
+        ),
+      ],
+    );
+  }
+
+  /// Build error state UI
+  Widget _buildErrorState(SessionsError errorState) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'حدث خطأ',
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              errorState.message,
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () {
+                    // Retry by dispatching a new event
+                    context.read<SessionsBloc>().add(const LoadSessions());
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('إعادة المحاولة'),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('العودة'),
                 ),
               ],
-            );
-          },
+            ),
+          ],
         ),
       ),
     );
@@ -311,9 +413,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
       return const Center(child: Text('لم يتم تحديد طلاب'));
     }
 
-    final selectedStudents = _availableStudents
-        .where((s) => _selectedStudentIds.contains(s.id))
-        .toList();
+    final selectedStudents = _availableStudents.where((s) => _selectedStudentIds.contains(s.id)).toList();
 
     return BlocBuilder<PricesBloc, PricesState>(
       builder: (context, priceState) {
@@ -397,9 +497,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                 final isPresent = _attendance[student.id] ?? true;
                 final lessonPrice = _lessonPrices[student.id] ?? 0;
                 final bookletPrice = _bookletPrices[student.id] ?? 0;
-                final total = isPresent
-                    ? lessonPrice + (_hasBooklet ? bookletPrice : 0)
-                    : 0;
+                final total = isPresent ? lessonPrice + (_hasBooklet ? bookletPrice : 0) : 0;
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
@@ -413,9 +511,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                     ),
                     title: Text(student.name),
                     subtitle: Text(
-                      isPresent
-                          ? '$lessonPrice ج.م${_hasBooklet ? ' + $bookletPrice ج.م = $total ج.م' : ''}'
-                          : 'غائب',
+                      isPresent ? '$lessonPrice ج.م${_hasBooklet ? ' + $bookletPrice ج.م = $total ج.م' : ''}' : 'غائب',
                     ),
                     trailing: Switch(
                       value: isPresent,
@@ -461,46 +557,113 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
+    final date = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (picked != null) {
-      setState(() => _selectedDate = picked);
+    if (date != null) {
+      setState(() {
+        _selectedDate = date;
+      });
     }
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
+    final time = await showTimePicker(
       context: context,
       initialTime: _selectedTime,
     );
-    if (picked != null) {
-      setState(() => _selectedTime = picked);
+    if (time != null) {
+      setState(() {
+        _selectedTime = time;
+      });
     }
   }
 
   void _onStepContinue() {
     if (_currentStep == 0) {
-      // Validate step 1
       if (_formKey.currentState!.validate()) {
-        setState(() => _currentStep = 1);
+        setState(() {
+          _currentStep = 1;
+        });
       }
     } else if (_currentStep == 1) {
-      // Validate step 2
-      if (_selectedStudentIds.isEmpty) {
-        EasyLoading.showToast('يرجى تحديد طالب واحد على الأقل');
-      } else {
-        setState(() => _currentStep = 2);
+      if (_selectedStudentIds.isNotEmpty) {
+        setState(() {
+          _currentStep = 2;
+        });
       }
     }
   }
 
+  /// Save session with enhanced state handling and validation
   void _saveSession() {
-    EasyLoading.show(status: 'جاري حفظ الحصة...');
-    final dateTime = DateTime(
+    // Validate form before saving
+    if (!_validateSessionData()) {
+      return;
+    }
+
+    try {
+      final dateTime = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+        _selectedTime.hour,
+        _selectedTime.minute,
+      );
+
+      final attendances = _selectedStudentIds.map((studentId) {
+        final student = _availableStudents.firstWhere((s) => s.id == studentId);
+        final isPresent = _attendance[studentId] ?? true;
+        final lessonPrice = _lessonPrices[studentId] ?? 0;
+        final bookletPrice = _bookletPrices[studentId] ?? 0;
+
+        return Attendance(
+          studentId: studentId,
+          studentName: student.name,
+          present: isPresent,
+          lessonPriceSnap: lessonPrice,
+          bookletPriceSnap: bookletPrice,
+          sessionCharge: isPresent ? lessonPrice : 0,
+          bookletCharge: isPresent && _hasBooklet ? bookletPrice : 0,
+        );
+      }).toList();
+
+      final session = Session.createNew(
+        dateTime: dateTime,
+        hasBooklet: _hasBooklet,
+        note: _noteController.text.isNotEmpty ? _noteController.text : null,
+        attendances: attendances,
+      );
+
+      // Dispatch the create session event
+      context.read<SessionsBloc>().add(CreateSession(session));
+    } catch (e) {
+      // Handle any errors during session creation
+      EasyLoading.showError('خطأ في إنشاء الحصة: ${e.toString()}');
+    }
+  }
+
+  /// Validate session data before saving
+  bool _validateSessionData() {
+    // Check if students are selected
+    if (_selectedStudentIds.isEmpty) {
+      EasyLoading.showError('يرجى تحديد طلاب للحصة');
+      return false;
+    }
+
+    // Check if at least one student is present
+    final hasPresentStudents = _selectedStudentIds.any((id) => _attendance[id] == true);
+    if (!hasPresentStudents) {
+      EasyLoading.showError('يجب أن يكون هناك طالب واحد على الأقل حاضر');
+      return false;
+    }
+
+    // Check if session date is not in the past (except for today)
+    final now = DateTime.now();
+    final sessionDateTime = DateTime(
       _selectedDate.year,
       _selectedDate.month,
       _selectedDate.day,
@@ -508,30 +671,17 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
       _selectedTime.minute,
     );
 
-    final attendances = _selectedStudentIds.map((studentId) {
-      final student = _availableStudents.firstWhere((s) => s.id == studentId);
-      final isPresent = _attendance[studentId] ?? true;
-      final lessonPrice = _lessonPrices[studentId] ?? 0;
-      final bookletPrice = _bookletPrices[studentId] ?? 0;
+    if (sessionDateTime.isBefore(now.subtract(const Duration(hours: 1)))) {
+      EasyLoading.showError('لا يمكن إنشاء حصة في الماضي');
+      return false;
+    }
 
-      return Attendance(
-        studentId: studentId,
-        studentName: student.name,
-        present: isPresent,
-        lessonPriceSnap: lessonPrice,
-        bookletPriceSnap: bookletPrice,
-        sessionCharge: isPresent ? lessonPrice : 0,
-        bookletCharge: isPresent && _hasBooklet ? bookletPrice : 0,
-      );
-    }).toList();
+    // Check if session date is not too far in the future
+    if (sessionDateTime.isAfter(now.add(const Duration(days: 365)))) {
+      EasyLoading.showError('لا يمكن إنشاء حصة بعد أكثر من سنة');
+      return false;
+    }
 
-    final session = Session.createNew(
-      dateTime: dateTime,
-      hasBooklet: _hasBooklet,
-      note: _noteController.text.isNotEmpty ? _noteController.text : null,
-      attendances: attendances,
-    );
-
-    context.read<SessionsBloc>().add(CreateSession(session));
+    return true;
   }
 }

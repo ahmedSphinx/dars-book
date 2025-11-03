@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import 'app_logging_services.dart';
 
 /// Service to manage app session timeout and authentication
 class SessionService {
@@ -14,8 +15,7 @@ class SessionService {
   int _sessionTimeoutMinutes = _defaultTimeoutMinutes;
 
   // Stream controller for session events
-  final StreamController<SessionEvent> _sessionController =
-      StreamController<SessionEvent>.broadcast();
+  final StreamController<SessionEvent> _sessionController = StreamController<SessionEvent>.broadcast();
 
   Stream<SessionEvent> get sessionStream => _sessionController.stream;
 
@@ -30,13 +30,10 @@ class SessionService {
     try {
       final timeoutStr = await _secureStorage.read(key: _sessionTimeoutKey);
       if (timeoutStr != null) {
-        _sessionTimeoutMinutes =
-            int.tryParse(timeoutStr) ?? _defaultTimeoutMinutes;
+        _sessionTimeoutMinutes = int.tryParse(timeoutStr) ?? _defaultTimeoutMinutes;
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error loading session settings: $e');
-      }
+      AppLogging.logError('Error loading session settings: $e');
     }
   }
 
@@ -48,9 +45,7 @@ class SessionService {
         _lastAuthTime = DateTime.tryParse(lastAuthStr);
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error loading last auth time: $e');
-      }
+      AppLogging.logError('Error loading last auth time: $e');
     }
   }
 
@@ -62,9 +57,7 @@ class SessionService {
         value: _lastAuthTime?.toIso8601String(),
       );
     } catch (e) {
-      if (kDebugMode) {
-        print('Error saving last auth time: $e');
-      }
+      AppLogging.logError('Error saving last auth time: $e');
     }
   }
 
@@ -76,9 +69,7 @@ class SessionService {
         value: _sessionTimeoutMinutes.toString(),
       );
     } catch (e) {
-      if (kDebugMode) {
-        print('Error saving session timeout: $e');
-      }
+      AppLogging.logError('Error saving session timeout: $e');
     }
   }
 
@@ -133,12 +124,22 @@ class SessionService {
 
   /// Set session timeout in minutes
   Future<void> setSessionTimeout(int minutes) async {
-    _sessionTimeoutMinutes = minutes;
-    await _saveSessionTimeout();
+    // Validate timeout value
+    if (minutes <= 0 || minutes > 1440) {
+      throw ArgumentError('Session timeout must be between 1 and 1440 minutes (24 hours)');
+    }
 
-    // Restart timer with new timeout
-    if (_lastAuthTime != null) {
-      _startSessionTimer();
+    try {
+      _sessionTimeoutMinutes = minutes;
+      await _saveSessionTimeout();
+
+      // Restart timer with new timeout
+      if (_lastAuthTime != null) {
+        _startSessionTimer();
+      }
+    } catch (e) {
+      AppLogging.logError('Error setting session timeout: $e');
+      rethrow;
     }
   }
 

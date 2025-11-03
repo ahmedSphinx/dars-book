@@ -84,37 +84,46 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     LoadSubscription event,
     Emitter<SubscriptionState> emit,
   ) async {
-    emit(const SubscriptionLoading());
-    final result = await subscriptionRepository.getSubscriptionStatus();
-    result.fold(
-      (failure) => emit(SubscriptionError(failure.message)),
-      (subscription) => emit(SubscriptionLoaded(subscription)),
-    );
+    try {
+      emit(const SubscriptionLoading());
+      final result = await subscriptionRepository.getSubscriptionStatus();
+      result.fold(
+        (failure) => emit(SubscriptionError(failure.message)),
+        (subscription) => emit(SubscriptionLoaded(subscription)),
+      );
+    } catch (e) {
+      emit(SubscriptionError('فشل في تحميل بيانات الاشتراك: ${e.toString()}'));
+    }
   }
 
   Future<void> _onRedeemVoucher(
     RedeemSubscriptionVoucher event,
     Emitter<SubscriptionState> emit,
   ) async {
-    emit(const SubscriptionLoading());
-    final result = await subscriptionRepository.redeemVoucher(event.voucherCode);
-    result.fold(
-      (failure) => emit(SubscriptionError(failure.message)),
-      (subscription) => emit(SubscriptionRedeemed(subscription)),
-    );
+    try {
+      emit(const SubscriptionLoading());
+      final result = await subscriptionRepository.redeemVoucher(event.voucherCode);
+      result.fold(
+        (failure) => emit(SubscriptionError(failure.message)),
+        (subscription) => emit(SubscriptionRedeemed(subscription)),
+      );
+    } catch (e) {
+      emit(SubscriptionError('فشل في استبدال القسيمة: ${e.toString()}'));
+    }
   }
 
   Future<void> _onWatchSubscriptionStarted(
     WatchSubscriptionStarted event,
     Emitter<SubscriptionState> emit,
   ) async {
-    await emit.forEach<Subscription?>(
-      subscriptionRepository.watchSubscription(),
-      onData: (subscription) => SubscriptionLoaded(subscription),
-      onError: (_, __) => const SubscriptionError('Failed to watch subscription'),
-    );
+    try {
+      await emit.forEach<Subscription?>(
+        subscriptionRepository.watchSubscription(),
+        onData: (subscription) => SubscriptionLoaded(subscription),
+        onError: (error, stackTrace) => SubscriptionError('فشل في مراقبة الاشتراك: ${error.toString()}'),
+      );
+    } catch (e) {
+      emit(SubscriptionError('فشل في بدء مراقبة الاشتراك: ${e.toString()}'));
+    }
   }
 }
-
-
-
